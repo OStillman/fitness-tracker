@@ -55,7 +55,7 @@ function getSlotsFromConfig(
     slots.push({
       id: 'weekly-run',
       dayName: DAY_NAMES[preferredRunDay],
-      dayOffset,
+      dayOffset: runOffset,
       title: 'Weekly Run',
       defaultKind: 'run',
       isRunSlot: true,
