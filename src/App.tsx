@@ -10,21 +10,45 @@ import { CardioStats } from './components/CardioStats';
 import { SettingsModal } from './components/SettingsModal';
 import { computeStreakStats, getParkrunPBs } from './utils/streak';
 import { syncWithServer, subscribeSyncState, type SyncState } from './sync/syncEngine';
-import { handleAuthCallback } from './auth/pocketId';
+import { userManager, loginWithPocketId, handleAuthCallback, POCKET_ID_AUTHORITY } from './auth/pocketId';
+import type { User } from 'oidc-client-ts';
+import { Flame, LogIn, Lock, Loader2 } from 'lucide-react';
 import type { ActivityKind, Session, SwapReason } from './types';
 
 export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
 
   // Subscribe to Dexie database updates reactively
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
 
-  // Handle Pocket-ID OAuth callback on load
+  // Check auth and process OAuth callback on load
   useEffect(() => {
-    handleAuthCallback().then(() => {
-      syncWithServer();
-    });
+    async function initAuth() {
+      try {
+        if (window.location.pathname === '/auth-callback') {
+          const authUser = await handleAuthCallback();
+          if (authUser && !authUser.expired) {
+            setUser(authUser);
+            await syncWithServer();
+          }
+        } else {
+          const currentUser = await userManager.getUser();
+          if (currentUser && !currentUser.expired) {
+            setUser(currentUser);
+            await syncWithServer();
+          }
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+      } finally {
+        setLoadingAuth(false);
+      }
+    }
+
+    initAuth();
 
     const unsubSync = subscribeSyncState(setSyncState);
     return () => unsubSync();
@@ -199,6 +223,57 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // 1. Loading Splash
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-3" />
+        <p className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Loading tracker...</p>
+      </div>
+    );
+  }
+
+  // 2. Strict Login Gate Screen
+  if (!user || user.expired) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-6 py-12">
+        <div className="w-full max-w-sm flex flex-col items-center text-center">
+          {/* Logo */}
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center mb-5 shadow-xl shadow-amber-950/20">
+            <Flame className="w-8 h-8 text-amber-400 fill-amber-500 animate-pulse" />
+          </div>
+
+          <h1 className="text-2xl font-black tracking-tight text-white mb-2">
+            Brizfit & Activity Tracker
+          </h1>
+          <p className="text-xs text-slate-400 mb-8 max-w-xs leading-relaxed">
+            Track bootcamp consistency, Parkrun personal bests, and cardio volume without spreadsheets.
+          </p>
+
+          <div className="w-full p-6 bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl">
+            <div className="flex items-center justify-center gap-2 text-slate-400 text-xs mb-4 font-semibold">
+              <Lock className="w-4 h-4 text-emerald-400" />
+              <span>Authentication Required</span>
+            </div>
+
+            <button
+              onClick={() => loginWithPocketId()}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 active-press shadow-lg shadow-emerald-950/40 transition"
+            >
+              <LogIn className="w-4 h-4 stroke-[2.5]" />
+              <span>Sign In with Pocket-ID</span>
+            </button>
+
+            <div className="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-500 truncate">
+              ID Provider: {POCKET_ID_AUTHORITY}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Authenticated Dashboard
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
       {/* Sticky Header with Streak Count and Week Score */}
