@@ -36,7 +36,7 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
   const [selectedVenue, setSelectedVenue] = useState('Ashton Court');
   const [customVenue, setCustomVenue] = useState('');
   const [timeInput, setTimeInput] = useState(''); // mm:ss
-  const [dateInput, setDateInput] = useState(formatDateStr(new Date()));
+  const [dateInput, setDateInput] = useState(''); // empty by default so past PBs don't overwrite current week
   const [positionInput, setPositionInput] = useState('');
 
   // Sync Form State
@@ -76,7 +76,7 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
       setCustomVenue('');
     }
     setTimeInput('');
-    setDateInput(formatDateStr(new Date()));
+    setDateInput('');
     setPositionInput('');
     setAthleteIdInput(storedAthleteId || '');
     setErrorMsg(null);
@@ -99,9 +99,10 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
     }
 
     const position = positionInput ? parseInt(positionInput, 10) : undefined;
+    const finalDate = dateInput.trim() || '2020-01-01';
 
     if (onSavePB) {
-      await onSavePB(venue, timeSeconds, dateInput || formatDateStr(new Date()), position);
+      await onSavePB(venue, timeSeconds, finalDate, position);
     }
 
     setIsModalOpen(false);
@@ -205,7 +206,7 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
                   <MapPin className="w-3 h-3 text-amber-400/80" />
                   <span>{overallPB.eventName}</span>
                   <span className="text-slate-600">•</span>
-                  <span>{overallPB.date}</span>
+                  <span>{overallPB.date === '2020-01-01' ? 'Previous PB' : overallPB.date}</span>
                 </div>
               </div>
 
@@ -257,7 +258,9 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
                       <span className="font-mono font-bold text-white">
                         {formatTimeMMSS(rec.bestTimeSeconds)}
                       </span>
-                      <span className="text-[10px] text-slate-500">{rec.date}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {rec.date === '2020-01-01' ? 'Previous PB' : rec.date}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -440,7 +443,7 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
                 {/* Date Achieved */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Date Achieved (approximate is fine)
+                    Date Achieved <span className="text-slate-600 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="date"
@@ -448,6 +451,9 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
                     onChange={(e) => setDateInput(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
                   />
+                  <span className="text-[10px] text-slate-500 block mt-1">
+                    Leave blank if achieved in the past — won't affect this week's workout schedule.
+                  </span>
                 </div>
 
                 {/* Finishing Position (Optional) */}

@@ -66,6 +66,11 @@ export function computeStreakStats(
   let hasTrtConflict = false;
 
   for (const s of thisWeekSessions) {
+    // Historical benchmark PBs should NEVER count towards this week's active workouts
+    if (s.notes?.includes('Historical') || s.id.startsWith('parkrun-pb-')) {
+      continue;
+    }
+
     if (s.swapped_for === 'trt') {
       hasTrtConflict = true;
     }
@@ -105,6 +110,9 @@ export function computeStreakStats(
     let bScore = 0;
     let rScore = 0;
     for (const s of weekSess) {
+      if (s.notes?.includes('Historical') || s.id.startsWith('parkrun-pb-')) {
+        continue;
+      }
       if (s.done) {
         if (s.kind === 'brizfit') bScore++;
         else if (s.kind === 'parkrun') {

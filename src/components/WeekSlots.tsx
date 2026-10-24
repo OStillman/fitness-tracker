@@ -109,9 +109,15 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   const sundayStr = formatDateStr(sunday);
   const todayStr = formatDateStr(today);
 
-  // Find all runs/parkruns done during this current week
+  // Find all runs/parkruns done during this current week (ignore historical course PB benchmarks)
   const thisWeekRuns = sessions.filter(
-    (s) => s.done && (s.kind === 'run' || s.kind === 'parkrun') && s.date >= mondayStr && s.date <= sundayStr
+    (s) =>
+      s.done &&
+      (s.kind === 'run' || s.kind === 'parkrun') &&
+      s.date >= mondayStr &&
+      s.date <= sundayStr &&
+      !s.notes?.includes('Historical') &&
+      !s.id.startsWith('parkrun-pb-')
   );
   const hasCompletedRunThisWeek = thisWeekRuns.length > 0;
   const completedRunSession = thisWeekRuns[0];
@@ -187,8 +193,10 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
           slotDate.setDate(monday.getDate() + slot.dayOffset);
           const dateStr = formatDateStr(slotDate);
 
-          // Find existing session for this exact slot date
-          const existingSession = sessions.find((s) => s.date === dateStr);
+          // Find existing session for this exact slot date (ignore historical course PB benchmarks)
+          const existingSession = sessions.find(
+            (s) => s.date === dateStr && !s.notes?.includes('Historical') && !s.id.startsWith('parkrun-pb-')
+          );
 
           if (slot.isRunSlot) {
             // Flexible Weekly Run Slot Logic

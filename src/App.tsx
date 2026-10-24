@@ -11,7 +11,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { PendingActivityBanner } from './components/PendingActivityBanner';
 import { WeeklyGoalCard } from './components/WeeklyGoalCard';
 import { GoalsAndSuggestionsModal } from './components/GoalsAndSuggestionsModal';
-import { computeStreakStats, getParkrunPBs, formatDateStr } from './utils/streak';
+import { computeStreakStats, getParkrunPBs, formatDateStr, getWeekStart } from './utils/streak';
 import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
 import {
   getUserManager,
@@ -94,6 +94,31 @@ export const App: React.FC = () => {
       unsubPending();
     };
   }, []);
+
+  // Self-heal: ensure historical PB benchmarks aren't scheduled in the current week
+  useEffect(() => {
+    if (!sessions || sessions.length === 0) return;
+    const currentWeekMondayStr = formatDateStr(getWeekStart(new Date()));
+    const misplacedPBs = sessions.filter(
+      (s) =>
+        (s.id.startsWith('parkrun-pb-') || (s.kind === 'parkrun' && s.notes?.includes('Historical'))) &&
+        s.date >= currentWeekMondayStr
+    );
+
+    if (misplacedPBs.length > 0) {
+      console.log(`[AutoHeal] Relocating ${misplacedPBs.length} misplaced historical PB(s) out of the current week.`);
+      (async () => {
+        for (const s of misplacedPBs) {
+          await db.sessions.update(s.id, {
+            date: '2020-01-01',
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          });
+        }
+        syncWithServer();
+      })();
+    }
+  }, [sessions]);
 
   const streakStats = computeStreakStats(sessions, userGoals);
 
@@ -275,23 +300,32 @@ export const App: React.FC = () => {
     date?: string,
     position?: number
   ) => {
-    const targetDate = date || formatDateStr(new Date());
+    // Default to 2020-01-01 if no date provided so it never intrudes on current week
+    const rawDate = (date && date.trim()) ? date.trim() : '2020-01-01';
+    const currentWeekMondayStr = formatDateStr(getWeekStart(new Date()));
+    // If the date accidentally falls into current week or future, safely relocate it to past
+    const targetDate = rawDate >= currentWeekMondayStr ? '2020-01-01' : rawDate;
+
     const now = Date.now();
     const prevPBs = getParkrunPBs(sessions);
 
     const existing = sessions.find(
-      (s) => s.kind === 'parkrun' && s.parkrun?.eventName === eventName && s.date === targetDate
+      (s) =>
+        s.kind === 'parkrun' &&
+        s.parkrun?.eventName.toLowerCase() === eventName.toLowerCase() &&
+        (s.id.startsWith('parkrun-pb-') || s.notes?.includes('Historical'))
     );
 
     if (existing) {
       await db.sessions.update(existing.id, {
+        date: targetDate,
         done: true,
         parkrun: {
           eventName,
           timeSeconds,
           position: position ?? existing.parkrun?.position
         },
-        notes: existing.notes || 'Historical PB',
+        notes: existing.notes || 'Historical Course PB',
         updatedAt: now,
         syncStatus: 'pending'
       });
