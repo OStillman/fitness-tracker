@@ -267,6 +267,57 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // Save historical or circuit PB
+  const handleSaveCircuitPB = async (
+    eventName: string,
+    timeSeconds: number,
+    date?: string,
+    position?: number
+  ) => {
+    const targetDate = date || formatDateStr(new Date());
+    const now = Date.now();
+    const prevPBs = getParkrunPBs(sessions);
+
+    const existing = sessions.find(
+      (s) => s.kind === 'parkrun' && s.parkrun?.eventName === eventName && s.date === targetDate
+    );
+
+    if (existing) {
+      await db.sessions.update(existing.id, {
+        done: true,
+        parkrun: {
+          eventName,
+          timeSeconds,
+          position: position ?? existing.parkrun?.position
+        },
+        notes: existing.notes || 'Historical PB',
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+    } else {
+      await db.sessions.put({
+        id: `parkrun-pb-${Date.now()}`,
+        date: targetDate,
+        kind: 'parkrun',
+        done: true,
+        parkrun: {
+          eventName,
+          timeSeconds,
+          position
+        },
+        notes: 'Historical Course PB',
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+    }
+
+    if (!prevPBs.overallPB || timeSeconds < prevPBs.overallPB.bestTimeSeconds) {
+      triggerPBConfetti();
+    }
+
+    syncWithServer();
+  };
+
   // Log Cycle, Run, or Walk
   const handleLogActivity = async (
     date: string,
@@ -417,7 +468,7 @@ export const App: React.FC = () => {
         <Heatmap sessions={sessions} />
 
         {/* Parkrun PB Records & Celebration */}
-        <ParkrunPB sessions={sessions} />
+        <ParkrunPB sessions={sessions} onSavePB={handleSaveCircuitPB} />
 
         {/* Monthly Cardio Breakdown: Rides, Runs, Walks */}
         <CardioStats sessions={sessions} />
