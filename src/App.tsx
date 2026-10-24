@@ -225,6 +225,35 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // Swap session kind on a target date (e.g. swap Saturday Parkrun back to Brizfit or vice versa)
+  const handleSwapKind = async (date: string, newKind: ActivityKind) => {
+    const existing = sessions.find(
+      (s) => s.date === date && !s.notes?.includes('Historical') && !s.id.startsWith('parkrun-pb-')
+    );
+    const now = Date.now();
+
+    if (existing) {
+      await db.sessions.update(existing.id, {
+        kind: newKind,
+        done: true,
+        swapped_for: null,
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+    } else {
+      await db.sessions.put({
+        id: `sess-${date}-${now}`,
+        date,
+        kind: newKind,
+        done: true,
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+    }
+
+    syncWithServer();
+  };
+
   // Add/Update Quick Note
   const handleAddNote = async (date: string, kind: ActivityKind, notes: string) => {
     const existing = sessions.find((s) => s.date === date);
@@ -524,6 +553,7 @@ export const App: React.FC = () => {
           maxRunDistanceKm={userGoals.maxRunDistanceKm ?? 5}
           onToggleSession={handleToggleSession}
           onSwapSession={handleSwapSession}
+          onSwapKind={handleSwapKind}
           onAddNote={handleAddNote}
           onOpenWorkoutSuggestions={() => {
             setGoalsModalTab('suggestions');

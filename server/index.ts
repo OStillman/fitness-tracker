@@ -46,6 +46,23 @@ app.get('/api/config', (c) => {
 app.use('/api/*', authMiddleware);
 app.route('/api/sync', syncRouter);
 
+// Prevent aggressive caching of PWA entrypoints (service worker, index.html, webmanifest)
+app.use('*', async (c, next) => {
+  await next();
+  const reqPath = c.req.path;
+  if (
+    reqPath === '/' ||
+    reqPath.endsWith('index.html') ||
+    reqPath.endsWith('sw.js') ||
+    reqPath.endsWith('registerSW.js') ||
+    reqPath.endsWith('.webmanifest')
+  ) {
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    c.header('Pragma', 'no-cache');
+    c.header('Expires', '0');
+  }
+});
+
 // Serve frontend static build files (production)
 const distDir = path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(distDir)) {

@@ -11,6 +11,7 @@ interface WeekSlotsProps {
   maxRunDistanceKm?: number;
   onToggleSession: (date: string, kind: ActivityKind) => Promise<void>;
   onSwapSession: (date: string, kind: ActivityKind, swappedFor: SwapReason, notes?: string) => Promise<void>;
+  onSwapKind?: (date: string, newKind: ActivityKind) => Promise<void>;
   onAddNote: (date: string, kind: ActivityKind, notes: string) => Promise<void>;
   onOpenWorkoutSuggestions?: () => void;
 }
@@ -74,6 +75,7 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   maxRunDistanceKm = 5,
   onToggleSession,
   onSwapSession,
+  onSwapKind,
   onAddNote,
   onOpenWorkoutSuggestions
 }) => {
@@ -407,21 +409,45 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
                 </button>
               )}
 
-              {/* Saturday Parkrun swap button */}
+              {/* Saturday Parkrun / Brizfit swap options */}
               {!selectedSlot.isRunSlot && parseDateStr(selectedSlot.date).getDay() === 6 && (
-                <button
-                  onClick={async () => {
-                    await onToggleSession(selectedSlot.date, 'parkrun');
-                    setSelectedSlot(null);
-                  }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-amber-950/60 hover:bg-amber-900/60 border border-amber-500/40 text-amber-200 flex items-center justify-between text-sm font-semibold active-press"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Flame className="w-4 h-4 text-amber-400" />
-                    <span>Swap for Saturday Parkrun</span>
-                  </div>
-                  <span className="text-[10px] text-amber-300 uppercase font-bold">Counts for streak</span>
-                </button>
+                selectedSlot.session?.kind === 'parkrun' ? (
+                  <button
+                    onClick={async () => {
+                      if (onSwapKind) {
+                        await onSwapKind(selectedSlot.date, 'brizfit');
+                      } else {
+                        await onToggleSession(selectedSlot.date, 'brizfit');
+                      }
+                      setSelectedSlot(null);
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-200 flex items-center justify-between text-sm font-semibold active-press"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Flame className="w-4 h-4 text-emerald-400" />
+                      <span>Swap back to Brizfit Bootcamp</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-300 uppercase font-bold">Bootcamp</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (onSwapKind) {
+                        await onSwapKind(selectedSlot.date, 'parkrun');
+                      } else {
+                        await onToggleSession(selectedSlot.date, 'parkrun');
+                      }
+                      setSelectedSlot(null);
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-amber-950/60 hover:bg-amber-900/60 border border-amber-500/40 text-amber-200 flex items-center justify-between text-sm font-semibold active-press"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Flame className="w-4 h-4 text-amber-400" />
+                      <span>Swap for Saturday Parkrun</span>
+                    </div>
+                    <span className="text-[10px] text-amber-300 uppercase font-bold">Parkrun</span>
+                  </button>
+                )
               )}
 
               {/* Notes input */}

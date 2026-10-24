@@ -10,6 +10,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Brizfit Tracker</title>
+    <!-- Prevent PWA webview from serving stale HTML shell -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <!-- Dynamic runtime environment script from backend container with cache-busting -->
     <script>
       document.write('<script src="/env.js?t=' + Date.now() + '"><\/script>');

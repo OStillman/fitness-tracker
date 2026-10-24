@@ -162,6 +162,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           {/* Backup & Demo Data */}
           <div className="space-y-2">
             <button
+              onClick={async () => {
+                try {
+                  if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of registrations) {
+                      await reg.unregister();
+                    }
+                  }
+                  if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    for (const name of cacheNames) {
+                      await caches.delete(name);
+                    }
+                  }
+                  showStatus('PWA cache cleared! Reloading...');
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 400);
+                } catch (err: any) {
+                  alert('Error clearing cache: ' + err.message);
+                }
+              }}
+              className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold flex items-center justify-between active-press"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-cyan-400" />
+                <span>Clear PWA Cache & Reload</span>
+              </div>
+              <span className="text-[10px] text-cyan-400/80 uppercase font-bold">Update</span>
+            </button>
+
+            <button
               onClick={handleExportJSON}
               className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-between active-press"
             >
