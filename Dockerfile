@@ -7,12 +7,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
 # Build Vite PWA frontend and bundle backend
 RUN npm run build
+
+# Prune dev dependencies, keeping only compiled production packages
+RUN npm prune --omit=dev
 
 # --- Production Runner ---
 FROM node:22-bookworm-slim AS runner
@@ -23,13 +26,11 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATABASE_PATH=/data/fitness.db
 
-# Install sqlite runtime dependencies
+# Install sqlite runtime dependencies and curl for healthcheck
 RUN apt-get update && apt-get install -y sqlite3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy compiled frontend and bundled backend
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-server ./dist-server
 
