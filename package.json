@@ -1,0 +1,46 @@
+{
+  "name": "brizfit-tracker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build:client": "tsc -b && vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=dist-server/index.cjs --external:better-sqlite3",
+    "build": "npm run build:client && npm run build:server",
+    "start": "node dist-server/index.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^11.8.1",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "dexie": "^4.0.11",
+    "dexie-react-hooks": "^1.1.7",
+    "hono": "^4.6.14",
+    "jose": "^5.9.6",
+    "lucide-react": "^0.474.0",
+    "oidc-client-ts": "^3.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.24.2",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}

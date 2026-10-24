@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+/* Mobile tap highlight prevention */
+* {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Custom horizontal scrollbar for heatmap */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth spring animations for tap actions */
+.active-press:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease;
+}
