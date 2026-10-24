@@ -57,6 +57,21 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON sessions(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_parkruns_session ON parkruns(session_id);
     CREATE INDEX IF NOT EXISTS idx_activities_session ON activities(session_id);
+
+    CREATE TABLE IF NOT EXISTS pending_activities (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      type TEXT NOT NULL,
+      distance_km REAL,
+      duration_min INTEGER,
+      start_date TEXT NOT NULL,
+      start_time TEXT,
+      source TEXT DEFAULT 'strava',
+      status TEXT DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pending_activities_status ON pending_activities(status);
   `);
 
   console.log(`[Database] Initialized SQLite database at ${dbPath}`);

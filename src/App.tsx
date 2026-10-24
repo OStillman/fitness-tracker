@@ -8,12 +8,13 @@ import { Heatmap } from './components/Heatmap';
 import { ParkrunPB, triggerPBConfetti } from './components/ParkrunPB';
 import { CardioStats } from './components/CardioStats';
 import { SettingsModal } from './components/SettingsModal';
+import { PendingActivityBanner } from './components/PendingActivityBanner';
 import { computeStreakStats, getParkrunPBs } from './utils/streak';
-import { syncWithServer, subscribeSyncState, type SyncState } from './sync/syncEngine';
+import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
 import { getUserManager, loginWithPocketId, handleAuthCallback, getPocketIdAuthority } from './auth/pocketId';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
-import type { ActivityKind, Session, SwapReason } from './types';
+import type { ActivityKind, Session, SwapReason, PendingActivity } from './types';
 
 export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('idle');
@@ -21,6 +22,7 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [pendingActivities, setPendingActivities] = useState<PendingActivity[]>([]);
 
   // Subscribe to Dexie database updates reactively
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
@@ -62,7 +64,11 @@ export const App: React.FC = () => {
     initAuth();
 
     const unsubSync = subscribeSyncState(setSyncState);
-    return () => unsubSync();
+    const unsubPending = subscribePendingActivities(setPendingActivities);
+    return () => {
+      unsubSync();
+      unsubPending();
+    };
   }, []);
 
   const streakStats = computeStreakStats(sessions);
@@ -315,6 +321,9 @@ export const App: React.FC = () => {
 
       {/* Main Content Sections */}
       <main className="space-y-2">
+        {/* Pending Activity Banner from Strava / Home Assistant */}
+        <PendingActivityBanner activities={pendingActivities} />
+
         {/* Weekly Target Slots (Tue, Thu, Sat) */}
         <WeekSlots
           sessions={sessions}

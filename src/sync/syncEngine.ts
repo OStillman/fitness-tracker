@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { getAuthToken } from '../auth/pocketId';
-import type { Session } from '../types';
+import type { Session, PendingActivity } from '../types';
 
 export type SyncState = 'idle' | 'syncing' | 'error' | 'offline';
 
@@ -18,6 +18,22 @@ export function subscribeSyncState(fn: (state: SyncState) => void) {
 function setSyncState(state: SyncState) {
   currentSyncState = state;
   listeners.forEach((fn) => fn(state));
+}
+
+let latestPendingActivities: PendingActivity[] = [];
+const pendingListeners = new Set<(activities: PendingActivity[]) => void>();
+
+export function subscribePendingActivities(fn: (activities: PendingActivity[]) => void) {
+  pendingListeners.add(fn);
+  fn(latestPendingActivities);
+  return () => {
+    pendingListeners.delete(fn);
+  };
+}
+
+export function setPendingActivities(activities: PendingActivity[]) {
+  latestPendingActivities = activities;
+  pendingListeners.forEach((fn) => fn(activities));
 }
 
 export async function syncWithServer(): Promise<void> {
@@ -67,6 +83,11 @@ export async function syncWithServer(): Promise<void> {
     const serverSessions: Session[] = data.serverChanges || [];
     console.log(`[SyncEngine] Received ${serverSessions.length} update(s) from server.`);
 
+    // Update pending activities from Home Assistant/Strava
+    if (data.pendingActivities) {
+      setPendingActivities(data.pendingActivities);
+    }
+
     // Mark pushed sessions as synced
     if (pendingSessions.length > 0) {
       const syncedIds = pendingSessions.map((s) => s.id);
@@ -89,6 +110,30 @@ export async function syncWithServer(): Promise<void> {
     console.error('[SyncEngine] Network/Sync error:', err.message);
     setSyncState('error');
   }
+}
+
+export async function resolvePendingActivity(
+  id: string,
+  action: 'brizfit' | 'parkrun' | 'cycle' | 'run' | 'walk' | 'dismiss'
+): Promise<void> {
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  await fetch(`/api/integrations/activity/${id}/resolve`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action })
+  });
+
+  // Remove from local pending list immediately
+  setPendingActivities(latestPendingActivities.filter((a) => a.id !== id));
+
+  // Reset last_sync_timestamp to 0 so we pull the newly created session
+  localStorage.setItem('last_sync_timestamp', '0');
+  await syncWithServer();
 }
 
 // Auto-trigger sync when network reconnects

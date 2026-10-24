@@ -43,3 +43,16 @@ export interface ParkrunPBRecord {
   date: string;
   isOverallPB: boolean;
 }
+
+export interface PendingActivity {
+  id: string;
+  title: string;
+  type: string;
+  distance_km?: number | null;
+  duration_min?: number | null;
+  start_date: string;
+  start_time?: string | null;
+  source: string;
+  status: 'pending' | 'accepted' | 'dismissed';
+  created_at: number;
+}

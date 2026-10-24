@@ -4,6 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { initDatabase } from './db';
 import { authMiddleware } from './middleware/auth';
 import { syncRouter } from './routes/sync';
+import { integrationsRouter } from './routes/integrations';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,6 +15,9 @@ initDatabase();
 
 // Healthcheck endpoint (Public)
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
+
+// Home Assistant / Strava Integrations Webhook (Protected by optional HA secret, open on local network)
+app.route('/api/integrations', integrationsRouter);
 
 // Dynamic Runtime Environment Script (Public - allows changing .env without re-building container)
 app.get('/env.js', (c) => {

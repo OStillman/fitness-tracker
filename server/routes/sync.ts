@@ -111,8 +111,15 @@ syncRouter.post('/', async (c) => {
 
   console.log(`[Sync] Returning ${serverChanges.length} updated session(s) to user "${userId}".`);
 
+  const pendingActivities = db.prepare(`
+    SELECT * FROM pending_activities
+    WHERE status = 'pending'
+    ORDER BY created_at DESC
+  `).all();
+
   return c.json({
     serverTime: now,
-    serverChanges
+    serverChanges,
+    pendingActivities
   });
 });
