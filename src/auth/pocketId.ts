@@ -4,7 +4,7 @@ export function getPocketIdAuthority(): string {
   if (typeof window !== 'undefined' && window.__ENV__?.POCKET_ID_URL) {
     return window.__ENV__.POCKET_ID_URL;
   }
-  return import.meta.env.VITE_POCKET_ID_URL || 'http://localhost:8080';
+  return import.meta.env.VITE_POCKET_ID_URL || '';
 }
 
 export function getPocketIdClientId(): string {

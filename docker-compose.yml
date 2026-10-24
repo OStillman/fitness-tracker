@@ -8,16 +8,13 @@ services:
     ports:
       - "${HOST_PORT:-7429}:3000"
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - PORT=3000
       - DATABASE_PATH=/data/fitness.db
       - HOST_PORT=${HOST_PORT:-7429}
-      - POCKET_ID_URL=${POCKET_ID_URL:-http://pocket-id:80}
-      - POCKET_ID_CLIENT_ID=${POCKET_ID_CLIENT_ID:-brizfit-tracker}
-      - VITE_POCKET_ID_URL=${VITE_POCKET_ID_URL:-http://localhost:8080}
-      - VITE_CLIENT_ID=${VITE_CLIENT_ID:-brizfit-tracker}
+      - POCKET_ID_URL=${POCKET_ID_URL:-${VITE_POCKET_ID_URL}}
+      - POCKET_ID_CLIENT_ID=${POCKET_ID_CLIENT_ID:-${VITE_CLIENT_ID:-brizfit-tracker}}
     volumes:
       - ./data:/data
     networks:

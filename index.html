@@ -10,8 +10,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Brizfit Tracker</title>
-    <!-- Dynamic runtime environment script from backend container -->
-    <script src="/env.js"></script>
+    <!-- Dynamic runtime environment script from backend container with cache-busting -->
+    <script>
+      document.write('<script src="/env.js?t=' + Date.now() + '"><\/script>');
+    </script>
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen select-none antialiased font-sans touch-manipulation overscroll-none">
     <div id="root"></div>
