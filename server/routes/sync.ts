@@ -9,6 +9,7 @@ syncRouter.post('/', async (c) => {
   const { lastSyncTime = 0, changes = [] } = body;
 
   const now = Date.now();
+  console.log(`[Sync] User "${userId}" pushing ${changes.length} change(s). lastSyncTime=${lastSyncTime}`);
 
   const insertSession = db.prepare(`
     INSERT INTO sessions (id, user_id, date, kind, done, swapped_for, notes, updated_at)
@@ -82,11 +83,11 @@ syncRouter.post('/', async (c) => {
 
   syncTx();
 
-  // Retrieve server updates since lastSyncTime for this user
+  // Retrieve server updates since lastSyncTime (excluding records just pushed by this client)
   const updatedSessions = db.prepare(`
     SELECT * FROM sessions
-    WHERE user_id = ? AND updated_at > ?
-  `).all(userId, lastSyncTime) as any[];
+    WHERE updated_at > ?
+  `).all(lastSyncTime) as any[];
 
   const getParkrun = db.prepare('SELECT * FROM parkruns WHERE session_id = ?');
   const getActivity = db.prepare('SELECT * FROM activities WHERE session_id = ?');
@@ -107,6 +108,8 @@ syncRouter.post('/', async (c) => {
       activity: act ? { kind: act.kind, distanceKm: act.distance_km, durationMin: act.duration_min } : undefined
     };
   });
+
+  console.log(`[Sync] Returning ${serverChanges.length} updated session(s) to user "${userId}".`);
 
   return c.json({
     serverTime: now,

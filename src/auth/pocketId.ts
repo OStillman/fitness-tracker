@@ -61,7 +61,8 @@ export async function getAuthToken(): Promise<string | null> {
   const manager = getUserManager();
   const user = await manager.getUser();
   if (user && !user.expired) {
-    return user.access_token || user.id_token || null;
+    // Send id_token first as it is the cryptographically signed JWT validated by JWKS
+    return user.id_token || user.access_token || null;
   }
   return null;
 }
