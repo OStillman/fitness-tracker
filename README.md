@@ -11,10 +11,9 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Set your Pocket-ID URL and client ID in `.env` if desired:
+You can set any random host port you like in `.env` (defaults to `7429` to avoid clashing with common ports):
 ```env
-PORT=3000
-DATABASE_PATH=/data/fitness.db
+HOST_PORT=7429
 POCKET_ID_URL=http://pocket-id:80
 VITE_POCKET_ID_URL=https://auth.yourdomain.com
 ```
@@ -23,7 +22,7 @@ VITE_POCKET_ID_URL=https://auth.yourdomain.com
 ```bash
 docker compose up -d --build
 ```
-Your tracker is now live at `http://<home-server-ip>:3000` with persistent storage mounted in `./data/fitness.db`.
+Your tracker will be live at `http://<home-server-ip>:7429` (or whatever `HOST_PORT` you pick).
 
 ---
 
