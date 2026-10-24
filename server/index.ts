@@ -12,10 +12,32 @@ const app = new Hono();
 // Initialize SQLite database tables
 initDatabase();
 
-// Healthcheck endpoint
+// Healthcheck endpoint (Public)
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
 
-// Mount authenticated API routes
+// Dynamic Runtime Environment Script (Public - allows changing .env without re-building container)
+app.get('/env.js', (c) => {
+  const pocketIdUrl = process.env.VITE_POCKET_ID_URL || process.env.POCKET_ID_URL || 'http://localhost:8080';
+  const clientId = process.env.VITE_CLIENT_ID || process.env.POCKET_ID_CLIENT_ID || 'brizfit-tracker';
+
+  const script = `window.__ENV__ = ${JSON.stringify({
+    POCKET_ID_URL: pocketIdUrl,
+    CLIENT_ID: clientId,
+  })};`;
+
+  return c.text(script, 200, {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate'
+  });
+});
+
+app.get('/api/config', (c) => {
+  const pocketIdUrl = process.env.VITE_POCKET_ID_URL || process.env.POCKET_ID_URL || 'http://localhost:8080';
+  const clientId = process.env.VITE_CLIENT_ID || process.env.POCKET_ID_CLIENT_ID || 'brizfit-tracker';
+  return c.json({ pocketIdUrl, clientId });
+});
+
+// Authenticated API routes
 app.use('/api/*', authMiddleware);
 app.route('/api/sync', syncRouter);
 

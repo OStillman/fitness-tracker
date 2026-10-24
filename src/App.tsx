@@ -10,9 +10,9 @@ import { CardioStats } from './components/CardioStats';
 import { SettingsModal } from './components/SettingsModal';
 import { computeStreakStats, getParkrunPBs } from './utils/streak';
 import { syncWithServer, subscribeSyncState, type SyncState } from './sync/syncEngine';
-import { userManager, loginWithPocketId, handleAuthCallback, POCKET_ID_AUTHORITY } from './auth/pocketId';
+import { getUserManager, loginWithPocketId, handleAuthCallback, getPocketIdAuthority } from './auth/pocketId';
 import type { User } from 'oidc-client-ts';
-import { Flame, LogIn, Lock, Loader2 } from 'lucide-react';
+import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
 import type { ActivityKind, Session, SwapReason } from './types';
 
 export const App: React.FC = () => {
@@ -20,9 +20,20 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   // Subscribe to Dexie database updates reactively
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
+
+  // Listen for browser PWA install event
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
 
   // Check auth and process OAuth callback on load
   useEffect(() => {
@@ -35,7 +46,7 @@ export const App: React.FC = () => {
             await syncWithServer();
           }
         } else {
-          const currentUser = await userManager.getUser();
+          const currentUser = await getUserManager().getUser();
           if (currentUser && !currentUser.expired) {
             setUser(currentUser);
             await syncWithServer();
@@ -265,8 +276,26 @@ export const App: React.FC = () => {
             </button>
 
             <div className="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-500 truncate">
-              ID Provider: {POCKET_ID_AUTHORITY}
+              ID Provider: {getPocketIdAuthority()}
             </div>
+          </div>
+
+          {/* Optional PWA Install Prompt Button */}
+          {installPrompt && (
+            <button
+              onClick={() => {
+                installPrompt.prompt();
+                installPrompt.userChoice.then(() => setInstallPrompt(null));
+              }}
+              className="mt-4 w-full py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 active-press"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Install to Home Screen</span>
+            </button>
+          )}
+
+          <div className="mt-6 text-[11px] text-slate-500 max-w-xs">
+            Tip: On iPhone/Safari, tap <span className="text-slate-300 font-semibold">Share</span> then <span className="text-slate-300 font-semibold">"Add to Home Screen"</span>.
           </div>
         </div>
       </div>

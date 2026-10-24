@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, LogIn, LogOut, Download, Upload, Database, RefreshCw, Trash2, Check, ShieldCheck } from 'lucide-react';
 import { db, loadDemoData } from '../db';
-import { userManager, loginWithPocketId, logoutPocketId, POCKET_ID_AUTHORITY } from '../auth/pocketId';
+import { getUserManager, loginWithPocketId, logoutPocketId, getPocketIdAuthority } from '../auth/pocketId';
 import type { User } from 'oidc-client-ts';
 
 interface SettingsModalProps {
@@ -16,7 +16,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   useEffect(() => {
     if (isOpen) {
-      userManager.getUser().then((user) => setCurrentUser(user));
+      getUserManager().getUser().then((user) => setCurrentUser(user));
     }
   }, [isOpen]);
 
@@ -106,7 +106,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Pocket-ID Authentication
               </span>
               <span className="text-[10px] text-slate-500 truncate max-w-[150px]">
-                {POCKET_ID_AUTHORITY}
+                {getPocketIdAuthority()}
               </span>
             </div>
 

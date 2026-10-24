@@ -8,3 +8,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  __ENV__?: {
+    POCKET_ID_URL?: string;
+    CLIENT_ID?: string;
+  };
+}

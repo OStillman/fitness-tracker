@@ -1,30 +1,52 @@
 import { UserManager, type User, WebStorageStateStore } from 'oidc-client-ts';
 
-// Get authority and client id with fallbacks
-export const POCKET_ID_AUTHORITY = import.meta.env.VITE_POCKET_ID_URL || 'http://localhost:8080';
-export const POCKET_ID_CLIENT_ID = import.meta.env.VITE_CLIENT_ID || 'brizfit-tracker';
+export function getPocketIdAuthority(): string {
+  if (typeof window !== 'undefined' && window.__ENV__?.POCKET_ID_URL) {
+    return window.__ENV__.POCKET_ID_URL;
+  }
+  return import.meta.env.VITE_POCKET_ID_URL || 'http://localhost:8080';
+}
+
+export function getPocketIdClientId(): string {
+  if (typeof window !== 'undefined' && window.__ENV__?.CLIENT_ID) {
+    return window.__ENV__.CLIENT_ID;
+  }
+  return import.meta.env.VITE_CLIENT_ID || 'brizfit-tracker';
+}
 
 const redirectUri = `${window.location.origin}/auth-callback`;
 
-export const userManager = new UserManager({
-  authority: POCKET_ID_AUTHORITY,
-  client_id: POCKET_ID_CLIENT_ID,
-  redirect_uri: redirectUri,
-  response_type: 'code',
-  scope: 'openid profile email',
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
-  automaticSilentRenew: true,
-  loadUserInfo: true
-});
+let _userManager: UserManager | null = null;
+
+export function getUserManager(): UserManager {
+  if (!_userManager) {
+    const authority = getPocketIdAuthority();
+    const clientId = getPocketIdClientId();
+
+    _userManager = new UserManager({
+      authority,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid profile email',
+      userStore: new WebStorageStateStore({ store: window.localStorage }),
+      automaticSilentRenew: true,
+      loadUserInfo: true
+    });
+  }
+  return _userManager;
+}
 
 export async function loginWithPocketId(): Promise<void> {
-  await userManager.signinRedirect();
+  const manager = getUserManager();
+  await manager.signinRedirect();
 }
 
 export async function handleAuthCallback(): Promise<User | null> {
   if (window.location.pathname === '/auth-callback') {
     try {
-      const user = await userManager.signinCallback();
+      const manager = getUserManager();
+      const user = await manager.signinCallback();
       window.history.replaceState({}, document.title, '/');
       return user ?? null;
     } catch (err) {
@@ -36,7 +58,8 @@ export async function handleAuthCallback(): Promise<User | null> {
 }
 
 export async function getAuthToken(): Promise<string | null> {
-  const user = await userManager.getUser();
+  const manager = getUserManager();
+  const user = await manager.getUser();
   if (user && !user.expired) {
     return user.access_token || user.id_token || null;
   }
@@ -44,5 +67,6 @@ export async function getAuthToken(): Promise<string | null> {
 }
 
 export async function logoutPocketId(): Promise<void> {
-  await userManager.removeUser();
+  const manager = getUserManager();
+  await manager.removeUser();
 }
