@@ -79,6 +79,7 @@ export function initDatabase() {
       brizfit_weekly_target INTEGER DEFAULT 3,
       brizfit_target_days TEXT DEFAULT '[2,4,6]',
       run_weekly_target INTEGER DEFAULT 1,
+      preferred_run_day INTEGER DEFAULT 1,
       cycle_weekly_target INTEGER DEFAULT 0,
       max_run_distance_km REAL DEFAULT 5.0,
       updated_at INTEGER NOT NULL
@@ -86,6 +87,17 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
   `);
+
+  // Safe migration for existing user_goals tables
+  try {
+    const columns = db.pragma('table_info(user_goals)') as any[];
+    const hasPreferredRunDay = columns.some((col: any) => col.name === 'preferred_run_day');
+    if (!hasPreferredRunDay) {
+      db.exec('ALTER TABLE user_goals ADD COLUMN preferred_run_day INTEGER DEFAULT 1');
+    }
+  } catch (migErr) {
+    // Table may have just been created with the column
+  }
 
   console.log(`[Database] Initialized SQLite database at ${dbPath}`);
 }

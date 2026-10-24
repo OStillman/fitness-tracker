@@ -1,60 +1,99 @@
 import React, { useState, useRef } from 'react';
-import { Check, Flame, AlertTriangle, X } from 'lucide-react';
+import { Check, Flame, AlertTriangle, X, Footprints, Sparkles } from 'lucide-react';
 import type { Session, ActivityKind, SwapReason } from '../types';
 import { formatDateStr, parseDateStr } from '../utils/streak';
 
 interface WeekSlotsProps {
   sessions: Session[];
   targetDays?: number[];
+  preferredRunDay?: number;
+  runWeeklyTarget?: number;
+  maxRunDistanceKm?: number;
   onToggleSession: (date: string, kind: ActivityKind) => Promise<void>;
   onSwapSession: (date: string, kind: ActivityKind, swappedFor: SwapReason, notes?: string) => Promise<void>;
   onAddNote: (date: string, kind: ActivityKind, notes: string) => Promise<void>;
+  onOpenWorkoutSuggestions?: () => void;
 }
 
 interface SlotConfig {
+  id: string;
   dayName: string;
   dayOffset: number; // relative to Monday (0=Mon, 1=Tue, 3=Thu, 5=Sat)
   title: string;
   defaultKind: ActivityKind;
+  isRunSlot?: boolean;
   timeHint: string;
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function getSlotsFromDays(days: number[] = [2, 4, 6]): SlotConfig[] {
-  return days.map((d) => {
-    // d is 0..6 (0=Sun, 1=Mon, ..., 6=Sat)
-    const dayOffset = d === 0 ? 6 : d - 1; // offset relative to Monday
-    const dayName = DAY_NAMES[d];
+function getSlotsFromConfig(
+  targetDays: number[] = [2, 4, 6],
+  preferredRunDay: number = 1,
+  runWeeklyTarget: number = 1
+): SlotConfig[] {
+  const slots: SlotConfig[] = [];
+
+  // Brizfit / class slots
+  for (const d of targetDays) {
+    const dayOffset = d === 0 ? 6 : d - 1;
     const isSat = d === 6;
-    return {
-      dayName,
+    slots.push({
+      id: `class-${d}`,
+      dayName: DAY_NAMES[d],
       dayOffset,
       title: isSat ? 'Brizfit / Parkrun' : 'Brizfit',
-      defaultKind: 'brizfit' as ActivityKind,
+      defaultKind: 'brizfit',
+      isRunSlot: false,
       timeHint: isSat ? 'Morning' : 'Evening'
-    };
-  }).sort((a, b) => a.dayOffset - b.dayOffset);
+    });
+  }
+
+  // Flexible Run slot
+  if (runWeeklyTarget > 0) {
+    const runOffset = preferredRunDay === 0 ? 6 : preferredRunDay - 1;
+    slots.push({
+      id: 'weekly-run',
+      dayName: DAY_NAMES[preferredRunDay],
+      dayOffset,
+      title: 'Weekly Run',
+      defaultKind: 'run',
+      isRunSlot: true,
+      timeHint: 'Flexible'
+    });
+  }
+
+  return slots.sort((a, b) => a.dayOffset - b.dayOffset);
 }
 
 export const WeekSlots: React.FC<WeekSlotsProps> = ({
   sessions,
   targetDays = [2, 4, 6],
+  preferredRunDay = 1,
+  runWeeklyTarget = 1,
+  maxRunDistanceKm = 5,
   onToggleSession,
   onSwapSession,
-  onAddNote
+  onAddNote,
+  onOpenWorkoutSuggestions
 }) => {
-  const activeSlots = getSlotsFromDays(targetDays.length > 0 ? targetDays : [2, 4, 6]);
+  const activeSlots = getSlotsFromConfig(
+    targetDays.length > 0 ? targetDays : [2, 4, 6],
+    preferredRunDay,
+    runWeeklyTarget
+  );
+
   const [selectedSlot, setSelectedSlot] = useState<{
     date: string;
     kind: ActivityKind;
     session?: Session;
+    isRunSlot?: boolean;
   } | null>(null);
   const [noteInput, setNoteInput] = useState('');
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
 
-  // Compute this week's Monday
+  // Compute this week's Monday and Sunday
   const today = new Date();
   const day = today.getDay();
   const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
@@ -62,31 +101,59 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   monday.setDate(diffToMonday);
   monday.setHours(0, 0, 0, 0);
 
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  const mondayStr = formatDateStr(monday);
+  const sundayStr = formatDateStr(sunday);
+  const todayStr = formatDateStr(today);
+
+  // Find all runs/parkruns done during this current week
+  const thisWeekRuns = sessions.filter(
+    (s) => s.done && (s.kind === 'run' || s.kind === 'parkrun') && s.date >= mondayStr && s.date <= sundayStr
+  );
+  const hasCompletedRunThisWeek = thisWeekRuns.length > 0;
+  const completedRunSession = thisWeekRuns[0];
+
   const triggerHaptic = () => {
     if ('vibrate' in navigator) {
       navigator.vibrate(25);
     }
   };
 
-  const handlePointerDown = (date: string, kind: ActivityKind, session?: Session) => {
+  const handlePointerDown = (date: string, kind: ActivityKind, session?: Session, isRunSlot?: boolean) => {
     isLongPressRef.current = false;
     longPressTimerRef.current = setTimeout(() => {
       isLongPressRef.current = true;
       triggerHaptic();
-      setSelectedSlot({ date, kind, session });
+      setSelectedSlot({ date, kind, session, isRunSlot });
       setNoteInput(session?.notes || '');
-    }, 500); // 500ms holds triggers long press sheet
+    }, 500);
   };
 
-  const handlePointerUp = (date: string, kind: ActivityKind) => {
+  const handlePointerUp = async (date: string, slot: SlotConfig, sessionToToggle?: Session) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
     if (!isLongPressRef.current) {
-      // Regular 1-tap action!
       triggerHaptic();
-      onToggleSession(date, kind);
+
+      if (slot.isRunSlot) {
+        // Run slot toggle
+        if (hasCompletedRunThisWeek && completedRunSession) {
+          // Untoggle the existing run session
+          await onToggleSession(completedRunSession.date, completedRunSession.kind);
+        } else {
+          // Mark run done for today (or for slot date if today is before)
+          const targetLogDate = todayStr >= date ? todayStr : date;
+          await onToggleSession(targetLogDate, 'run');
+        }
+      } else {
+        // Standard class slot toggle
+        await onToggleSession(date, slot.defaultKind);
+      }
     }
   };
 
@@ -98,33 +165,128 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   };
 
   return (
-    <section className="px-4 py-4 max-w-md mx-auto">
-      <div className="flex items-center justify-between mb-3">
+    <section className="px-4 py-3 max-w-md mx-auto">
+      <div className="flex items-center justify-between mb-2.5">
         <h2 className="text-xs uppercase tracking-wider font-bold text-slate-400">
           This Week's Target Slots
         </h2>
-        <span className="text-[11px] text-slate-500">Tap to mark • Hold to swap</span>
+        <span className="text-[11px] text-slate-500">Tap to mark • Hold for options</span>
       </div>
 
-      <div className={`grid gap-2.5 ${activeSlots.length <= 2 ? 'grid-cols-2' : activeSlots.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+      <div
+        className={`grid gap-2 ${
+          activeSlots.length <= 2
+            ? 'grid-cols-2'
+            : activeSlots.length === 3
+            ? 'grid-cols-3'
+            : 'grid-cols-2 sm:grid-cols-4'
+        }`}
+      >
         {activeSlots.map((slot) => {
           const slotDate = new Date(monday);
           slotDate.setDate(monday.getDate() + slot.dayOffset);
           const dateStr = formatDateStr(slotDate);
 
-          // Find existing session for this date
+          // Find existing session for this exact slot date
           const existingSession = sessions.find((s) => s.date === dateStr);
+
+          if (slot.isRunSlot) {
+            // Flexible Weekly Run Slot Logic
+            const isRunDone = hasCompletedRunThisWeek;
+            const runSess = completedRunSession;
+            const ranOnDifferentDay = isRunDone && runSess && runSess.date !== dateStr;
+            const isPastPlannedDay = dateStr < todayStr && !isRunDone;
+
+            // Details of completed run
+            const runKm = runSess?.activity?.distanceKm || (runSess?.kind === 'parkrun' ? 5 : maxRunDistanceKm);
+            let differentDayName = '';
+            if (ranOnDifferentDay && runSess) {
+              const runDayNum = parseDateStr(runSess.date).getDay();
+              differentDayName = DAY_NAMES[runDayNum].slice(0, 3);
+            }
+
+            return (
+              <div
+                key={slot.id}
+                onPointerDown={() => handlePointerDown(dateStr, slot.defaultKind, runSess, true)}
+                onPointerUp={() => handlePointerUp(dateStr, slot, runSess)}
+                onPointerCancel={handlePointerCancel}
+                className={`relative rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between h-32 cursor-pointer transition-all active-press border select-none ${
+                  isRunDone
+                    ? 'bg-rose-950/40 border-rose-500/50 text-rose-200 shadow-lg shadow-rose-950/30'
+                    : isPastPlannedDay
+                    ? 'bg-slate-900/80 border-amber-500/40 text-slate-300'
+                    : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                {/* Header */}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-400">
+                        {slot.dayName.slice(0, 3)}
+                      </span>
+                      <Footprints className="w-2.5 h-2.5 text-rose-400" />
+                    </div>
+                    <span className="text-xs sm:text-sm font-semibold text-white">
+                      {slotDate.getDate()} {slotDate.toLocaleString('default', { month: 'short' })}
+                    </span>
+                  </div>
+
+                  {/* Status Indicator Checkbox */}
+                  <div
+                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center border transition ${
+                      isRunDone
+                        ? 'bg-rose-500 border-rose-400 text-slate-950'
+                        : isPastPlannedDay
+                        ? 'border-amber-500/50 bg-amber-950/40 text-amber-300'
+                        : 'border-slate-700 bg-slate-800/60'
+                    }`}
+                  >
+                    {isRunDone ? (
+                      <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
+                    ) : isPastPlannedDay ? (
+                      <span className="text-[8px] font-black uppercase">FLEX</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Bottom activity label */}
+                <div>
+                  <div className="text-xs font-bold leading-tight truncate text-white">
+                    {isRunDone
+                      ? ranOnDifferentDay
+                        ? `Done on ${differentDayName}`
+                        : 'Run Complete'
+                      : 'Weekly Run'}
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                    {isRunDone ? (
+                      <span className="text-rose-300 font-semibold">{runKm} km logged ✓</span>
+                    ) : isPastPlannedDay ? (
+                      <span className="text-amber-400/90 font-medium">Pending (Flexible)</span>
+                    ) : (
+                      'Flexible • Any day'
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Standard Class / Brizfit Slot
           const isDone = existingSession?.done ?? false;
           const isTrt = existingSession?.swapped_for === 'trt';
           const isParkrun = existingSession?.kind === 'parkrun';
 
           return (
             <div
-              key={slot.dayName}
-              onPointerDown={() => handlePointerDown(dateStr, slot.defaultKind, existingSession)}
-              onPointerUp={() => handlePointerUp(dateStr, slot.defaultKind)}
+              key={slot.id}
+              onPointerDown={() => handlePointerDown(dateStr, slot.defaultKind, existingSession, false)}
+              onPointerUp={() => handlePointerUp(dateStr, slot, existingSession)}
               onPointerCancel={handlePointerCancel}
-              className={`relative rounded-2xl p-3 flex flex-col justify-between h-32 cursor-pointer transition-all active-press border select-none ${
+              className={`relative rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between h-32 cursor-pointer transition-all active-press border select-none ${
                 isDone
                   ? isParkrun
                     ? 'bg-amber-950/40 border-amber-500/50 text-amber-200 shadow-lg shadow-amber-950/30'
@@ -140,14 +302,14 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
                   <span className="text-[10px] font-bold uppercase tracking-wider block text-slate-400">
                     {slot.dayName.slice(0, 3)}
                   </span>
-                  <span className="text-sm font-semibold text-white">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
                     {slotDate.getDate()} {slotDate.toLocaleString('default', { month: 'short' })}
                   </span>
                 </div>
 
                 {/* Status indicator checkbox */}
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center border transition ${
+                  className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center border transition ${
                     isDone
                       ? isParkrun
                         ? 'bg-amber-500 border-amber-400 text-slate-950'
@@ -158,7 +320,7 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
                   }`}
                 >
                   {isDone ? (
-                    <Check className="w-4 h-4 stroke-[3]" />
+                    <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
                   ) : isTrt ? (
                     <span className="text-[9px] font-black">TRT</span>
                   ) : null}
@@ -189,7 +351,9 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
               <div>
-                <h3 className="text-base font-bold text-white">Slot Options</h3>
+                <h3 className="text-base font-bold text-white">
+                  {selectedSlot.isRunSlot ? 'Run Slot Options' : 'Class Slot Options'}
+                </h3>
                 <p className="text-xs text-slate-400">{selectedSlot.date}</p>
               </div>
               <button
@@ -201,23 +365,42 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {/* Flag TRT conflict button */}
-              <button
-                onClick={async () => {
-                  await onSwapSession(selectedSlot.date, 'brizfit', 'trt', 'TRT meeting conflict');
-                  setSelectedSlot(null);
-                }}
-                className="w-full py-2.5 px-4 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 flex items-center justify-between text-sm font-semibold active-press"
-              >
-                <div className="flex items-center gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-purple-400" />
-                  <span>Flag as TRT Conflict</span>
-                </div>
-                <span className="text-[10px] text-purple-300 uppercase font-bold">1-Tap</span>
-              </button>
+              {/* If it's a run slot, offer to pick suggested workout */}
+              {selectedSlot.isRunSlot && onOpenWorkoutSuggestions && (
+                <button
+                  onClick={() => {
+                    setSelectedSlot(null);
+                    onOpenWorkoutSuggestions();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-200 flex items-center justify-between text-sm font-semibold active-press"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span>Pick Suggested Workout</span>
+                  </div>
+                  <span className="text-[10px] text-cyan-300 uppercase font-bold">Library</span>
+                </button>
+              )}
+
+              {/* Flag TRT conflict button (for class slots) */}
+              {!selectedSlot.isRunSlot && (
+                <button
+                  onClick={async () => {
+                    await onSwapSession(selectedSlot.date, 'brizfit', 'trt', 'TRT meeting conflict');
+                    setSelectedSlot(null);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 flex items-center justify-between text-sm font-semibold active-press"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-purple-400" />
+                    <span>Flag as TRT Conflict</span>
+                  </div>
+                  <span className="text-[10px] text-purple-300 uppercase font-bold">1-Tap</span>
+                </button>
+              )}
 
               {/* Saturday Parkrun swap button */}
-              {parseDateStr(selectedSlot.date).getDay() === 6 && (
+              {!selectedSlot.isRunSlot && parseDateStr(selectedSlot.date).getDay() === 6 && (
                 <button
                   onClick={async () => {
                     await onToggleSession(selectedSlot.date, 'parkrun');

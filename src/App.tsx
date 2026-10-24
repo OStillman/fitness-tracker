@@ -13,7 +13,13 @@ import { WeeklyGoalCard } from './components/WeeklyGoalCard';
 import { GoalsAndSuggestionsModal } from './components/GoalsAndSuggestionsModal';
 import { computeStreakStats, getParkrunPBs, formatDateStr } from './utils/streak';
 import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
-import { getUserManager, loginWithPocketId, handleAuthCallback, getPocketIdAuthority } from './auth/pocketId';
+import {
+  getUserManager,
+  loginWithPocketId,
+  handleAuthCallback,
+  getPocketIdAuthority,
+  restoreOrRenewSession
+} from './auth/pocketId';
 import { saveUserGoals } from './db';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
@@ -45,20 +51,20 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
   }, []);
 
-  // Check auth and process OAuth callback on load
+  // Check auth, restore persistent session, or silently renew token on load
   useEffect(() => {
     async function initAuth() {
       try {
         if (window.location.pathname === '/auth-callback') {
           const authUser = await handleAuthCallback();
-          if (authUser && !authUser.expired) {
+          if (authUser) {
             setUser(authUser);
             await syncWithServer();
           }
         } else {
-          const currentUser = await getUserManager().getUser();
-          if (currentUser && !currentUser.expired) {
-            setUser(currentUser);
+          const authUser = await restoreOrRenewSession();
+          if (authUser) {
+            setUser(authUser);
             await syncWithServer();
           }
         }
@@ -71,9 +77,18 @@ export const App: React.FC = () => {
 
     initAuth();
 
+    // Listen for silent token renewal events to keep session state active
+    const userManager = getUserManager();
+    const handleUserLoaded = (refreshedUser: User) => {
+      console.log('[Auth] User session silently renewed');
+      setUser(refreshedUser);
+    };
+    userManager.events.addUserLoaded(handleUserLoaded);
+
     const unsubSync = subscribeSyncState(setSyncState);
     const unsubPending = subscribePendingActivities(setPendingActivities);
     return () => {
+      userManager.events.removeUserLoaded(handleUserLoaded);
       unsubSync();
       unsubPending();
     };
@@ -98,6 +113,8 @@ export const App: React.FC = () => {
   const handleToggleSession = async (date: string, kind: ActivityKind) => {
     const existing = sessions.find((s) => s.date === date);
     const now = Date.now();
+    const isRun = kind === 'run';
+    const defaultRunKm = userGoals.maxRunDistanceKm ?? 5;
 
     if (existing) {
       if (existing.done) {
@@ -113,6 +130,13 @@ export const App: React.FC = () => {
           done: true,
           kind,
           swapped_for: null,
+          activity: isRun
+            ? {
+                kind: 'run',
+                distanceKm: defaultRunKm,
+                durationMin: Math.round(defaultRunKm * 6)
+              }
+            : existing.activity,
           updatedAt: now,
           syncStatus: 'pending'
         });
@@ -124,6 +148,13 @@ export const App: React.FC = () => {
         date,
         kind,
         done: true,
+        activity: isRun
+          ? {
+              kind: 'run',
+              distanceKm: defaultRunKm,
+              durationMin: Math.round(defaultRunKm * 6)
+            }
+          : undefined,
         updatedAt: now,
         syncStatus: 'pending'
       };
@@ -271,8 +302,8 @@ export const App: React.FC = () => {
     );
   }
 
-  // 2. Strict Login Gate Screen
-  if (!user || user.expired) {
+  // 2. Strict Login Gate Screen (only when logged out / unauthenticated)
+  if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-6 py-12">
         <div className="w-full max-w-sm flex flex-col items-center text-center">
@@ -359,13 +390,20 @@ export const App: React.FC = () => {
           }}
         />
 
-        {/* Weekly Target Slots (Tue, Thu, Sat or user custom days) */}
+        {/* Weekly Target Slots (Tue, Thu, Sat + Flexible Run Slot) */}
         <WeekSlots
           sessions={sessions}
           targetDays={userGoals.brizfitTargetDays}
+          preferredRunDay={userGoals.preferredRunDay ?? 1}
+          runWeeklyTarget={userGoals.runWeeklyTarget ?? 1}
+          maxRunDistanceKm={userGoals.maxRunDistanceKm ?? 5}
           onToggleSession={handleToggleSession}
           onSwapSession={handleSwapSession}
           onAddNote={handleAddNote}
+          onOpenWorkoutSuggestions={() => {
+            setGoalsModalTab('suggestions');
+            setIsGoalsModalOpen(true);
+          }}
         />
 
         {/* Quick-Action Bar (<= 2 taps for make-ups, parkruns, rides, walks) */}

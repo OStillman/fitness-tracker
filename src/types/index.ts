@@ -33,6 +33,7 @@ export interface UserGoals {
   brizfitWeeklyTarget: number; // default: 3
   brizfitTargetDays: number[]; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun. Default: [2, 4, 6] (Tue, Thu, Sat)
   runWeeklyTarget: number;     // default: 1 (at least 1 run a week on any day)
+  preferredRunDay: number;     // default: 1 (Monday)
   cycleWeeklyTarget: number;   // default: 0
   maxRunDistanceKm: number;    // default: 5 (max distance km for suggestions)
   updatedAt: number;
@@ -45,6 +46,7 @@ export const DEFAULT_USER_GOALS: UserGoals = {
   brizfitWeeklyTarget: 3,
   brizfitTargetDays: [2, 4, 6], // Tuesday, Thursday, Saturday
   runWeeklyTarget: 1, // At least 1 run a week on any day
+  preferredRunDay: 1, // Monday
   cycleWeeklyTarget: 0,
   maxRunDistanceKm: 5,
   updatedAt: 0,

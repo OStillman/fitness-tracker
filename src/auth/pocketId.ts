@@ -28,7 +28,7 @@ export function getUserManager(): UserManager {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: 'openid profile email',
+      scope: 'openid profile email offline_access',
       userStore: new WebStorageStateStore({ store: window.localStorage }),
       automaticSilentRenew: true,
       loadUserInfo: true
@@ -57,10 +57,35 @@ export async function handleAuthCallback(): Promise<User | null> {
   return null;
 }
 
-export async function getAuthToken(): Promise<string | null> {
+export async function restoreOrRenewSession(): Promise<User | null> {
   const manager = getUserManager();
-  const user = await manager.getUser();
-  if (user && !user.expired) {
+  let user = await manager.getUser();
+  if (!user) {
+    return null;
+  }
+
+  // If expired or near expiration, attempt silent renewal using the refresh_token
+  if (user.expired || (user.expires_at && user.expires_at - Date.now() / 1000 < 120)) {
+    try {
+      console.log('[Auth] Access token expired or expiring soon, attempting silent renewal...');
+      const renewedUser = await manager.signinSilent();
+      if (renewedUser && !renewedUser.expired) {
+        console.log('[Auth] Silent session renewal succeeded!');
+        return renewedUser;
+      }
+    } catch (err: any) {
+      console.warn('[Auth] Silent renewal notice (offline or network unavailable):', err.message);
+      // If offline or network error, keep user logged in using cached identity
+      return user;
+    }
+  }
+
+  return user;
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  const user = await restoreOrRenewSession();
+  if (user) {
     // Send id_token first as it is the cryptographically signed JWT validated by JWKS
     return user.id_token || user.access_token || null;
   }

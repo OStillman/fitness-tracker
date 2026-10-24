@@ -51,6 +51,7 @@ export const GoalsAndSuggestionsModal: React.FC<GoalsAndSuggestionsModalProps> =
   
   // Local form state
   const [runWeeklyTarget, setRunWeeklyTarget] = useState<number>(currentGoals.runWeeklyTarget ?? 1);
+  const [preferredRunDay, setPreferredRunDay] = useState<number>(currentGoals.preferredRunDay ?? 1);
   const [maxRunDistanceKm, setMaxRunDistanceKm] = useState<number>(currentGoals.maxRunDistanceKm ?? 5);
   const [brizfitWeeklyTarget, setBrizfitWeeklyTarget] = useState<number>(currentGoals.brizfitWeeklyTarget ?? 3);
   const [targetDays, setTargetDays] = useState<number[]>(currentGoals.brizfitTargetDays ?? [2, 4, 6]);
@@ -66,6 +67,7 @@ export const GoalsAndSuggestionsModal: React.FC<GoalsAndSuggestionsModalProps> =
   useEffect(() => {
     if (isOpen) {
       setRunWeeklyTarget(currentGoals.runWeeklyTarget ?? 1);
+      setPreferredRunDay(currentGoals.preferredRunDay ?? 1);
       setMaxRunDistanceKm(currentGoals.maxRunDistanceKm ?? 5);
       setBrizfitWeeklyTarget(currentGoals.brizfitWeeklyTarget ?? 3);
       setTargetDays(currentGoals.brizfitTargetDays ?? [2, 4, 6]);
@@ -91,6 +93,7 @@ export const GoalsAndSuggestionsModal: React.FC<GoalsAndSuggestionsModalProps> =
     try {
       await onSaveGoals({
         runWeeklyTarget,
+        preferredRunDay,
         maxRunDistanceKm,
         brizfitWeeklyTarget,
         brizfitTargetDays: targetDays
@@ -190,6 +193,36 @@ export const GoalsAndSuggestionsModal: React.FC<GoalsAndSuggestionsModalProps> =
                     </button>
                   ))}
                 </div>
+
+                {/* Preferred / Aimed Run Day Selection */}
+                {runWeeklyTarget > 0 && (
+                  <div className="pt-3 mt-3 border-t border-slate-800/80">
+                    <span className="text-xs font-semibold text-slate-300 block mb-1">
+                      Usual / Aimed Run Day:
+                    </span>
+                    <p className="text-[11px] text-slate-400 mb-2.5 leading-tight">
+                      Appears on your weekly schedule. If busy, running on any other day automatically fulfills it!
+                    </p>
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {DAYS_OF_WEEK.map((item) => {
+                        const isSelected = preferredRunDay === item.day;
+                        return (
+                          <button
+                            key={item.day}
+                            onClick={() => setPreferredRunDay(item.day)}
+                            className={`py-2 px-1 text-center rounded-xl border text-[11px] font-bold transition ${
+                              isSelected
+                                ? 'bg-rose-500/20 border-rose-400 text-rose-300 ring-1 ring-rose-400'
+                                : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Goal 2: Max Run Distance */}
