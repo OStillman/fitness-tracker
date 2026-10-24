@@ -19,6 +19,9 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
   const [customParkrunVenue, setCustomParkrunVenue] = useState('');
   const [parkrunTime, setParkrunTime] = useState(''); // mm:ss
   const [customKm, setCustomKm] = useState('');
+  const [customRunKm, setCustomRunKm] = useState('');
+  const [customRunMins, setCustomRunMins] = useState('');
+  const [cardioTab, setCardioTab] = useState<'run' | 'walk'>('run');
 
   const todayStr = formatDateStr(new Date());
 
@@ -205,54 +208,142 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
         </div>
       )}
 
-      {/* Slide-down Run / Walk Presets */}
+      {/* Slide-down Run / Walk Presets & Custom Distance */}
       {activeDrawer === 'cardio' && (
         <div className="mt-3 p-3.5 bg-slate-900 border border-rose-500/30 rounded-2xl shadow-xl animate-in fade-in duration-150">
-          <span className="text-xs font-bold text-rose-300 uppercase tracking-wide block mb-2">
-            Tap preset to log:
-          </span>
-          <div className="grid grid-cols-2 gap-2">
+          {/* Sub-tabs: Run vs Walk */}
+          <div className="flex gap-1.5 p-1 bg-slate-950 rounded-xl mb-3 border border-slate-800">
             <button
-              onClick={async () => {
-                await onLogActivity(todayStr, 'run', 5.0, 27);
-                setActiveDrawer(null);
-              }}
-              className="py-2 px-3 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center justify-between active-press"
+              type="button"
+              onClick={() => setCardioTab('run')}
+              className={`flex-1 py-1 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                cardioTab === 'run'
+                  ? 'bg-rose-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <span>5k Run</span>
-              <span className="text-[10px] text-rose-400">~27m</span>
+              <Footprints className="w-3.5 h-3.5" />
+              <span>Outdoor Run</span>
             </button>
             <button
-              onClick={async () => {
-                await onLogActivity(todayStr, 'run', 10.0, 55);
-                setActiveDrawer(null);
-              }}
-              className="py-2 px-3 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center justify-between active-press"
+              type="button"
+              onClick={() => setCardioTab('walk')}
+              className={`flex-1 py-1 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                cardioTab === 'walk'
+                  ? 'bg-teal-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <span>10k Run</span>
-              <span className="text-[10px] text-rose-400">~55m</span>
-            </button>
-            <button
-              onClick={async () => {
-                await onLogActivity(todayStr, 'walk', 3.0, 35);
-                setActiveDrawer(null);
-              }}
-              className="py-2 px-3 rounded-xl bg-teal-950/60 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-semibold flex items-center justify-between active-press"
-            >
-              <span>Short Walk</span>
-              <span className="text-[10px] text-teal-400">3 km</span>
-            </button>
-            <button
-              onClick={async () => {
-                await onLogActivity(todayStr, 'walk', 6.0, 70);
-                setActiveDrawer(null);
-              }}
-              className="py-2 px-3 rounded-xl bg-teal-950/60 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-semibold flex items-center justify-between active-press"
-            >
-              <span>Long Walk</span>
-              <span className="text-[10px] text-teal-400">6 km</span>
+              <Footprints className="w-3.5 h-3.5" />
+              <span>Walk</span>
             </button>
           </div>
+
+          {cardioTab === 'run' ? (
+            <>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                Quick Distance Presets:
+              </span>
+              <div className="grid grid-cols-4 gap-1.5 mb-3">
+                {[3.0, 5.0, 8.0, 10.0].map((km) => (
+                  <button
+                    key={km}
+                    onClick={async () => {
+                      const mins = Math.round(km * 5.5);
+                      await onLogActivity(todayStr, 'run', km, mins);
+                      setActiveDrawer(null);
+                    }}
+                    className="py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-200 text-xs font-bold text-center active-press"
+                  >
+                    {km} km
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Run Distance & Duration */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  placeholder="Distance km..."
+                  value={customRunKm}
+                  onChange={(e) => setCustomRunKm(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-rose-400"
+                />
+                <input
+                  type="number"
+                  placeholder="Mins (optional)"
+                  value={customRunMins}
+                  onChange={(e) => setCustomRunMins(e.target.value)}
+                  className="w-24 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-white text-center focus:outline-none focus:border-rose-400"
+                />
+                <button
+                  disabled={!customRunKm || parseFloat(customRunKm) <= 0}
+                  onClick={async () => {
+                    const km = parseFloat(customRunKm);
+                    const mins = customRunMins ? parseInt(customRunMins, 10) : Math.round(km * 5.5);
+                    if (km > 0) {
+                      await onLogActivity(todayStr, 'run', km, !isNaN(mins) ? mins : undefined);
+                      setActiveDrawer(null);
+                      setCustomRunKm('');
+                      setCustomRunMins('');
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl active-press"
+                >
+                  Log Run
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                Quick Walk Presets:
+              </span>
+              <div className="grid grid-cols-4 gap-1.5 mb-3">
+                {[2.0, 3.0, 5.0, 8.0].map((km) => (
+                  <button
+                    key={km}
+                    onClick={async () => {
+                      const mins = Math.round(km * 12);
+                      await onLogActivity(todayStr, 'walk', km, mins);
+                      setActiveDrawer(null);
+                    }}
+                    className="py-1.5 rounded-xl bg-teal-950/60 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-bold text-center active-press"
+                  >
+                    {km} km
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  placeholder="Walk distance km..."
+                  value={customRunKm}
+                  onChange={(e) => setCustomRunKm(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-400"
+                />
+                <button
+                  disabled={!customRunKm || parseFloat(customRunKm) <= 0}
+                  onClick={async () => {
+                    const km = parseFloat(customRunKm);
+                    if (km > 0) {
+                      await onLogActivity(todayStr, 'walk', km, Math.round(km * 12));
+                      setActiveDrawer(null);
+                      setCustomRunKm('');
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl active-press"
+                >
+                  Log Walk
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </section>

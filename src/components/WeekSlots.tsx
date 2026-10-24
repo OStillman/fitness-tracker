@@ -9,10 +9,11 @@ interface WeekSlotsProps {
   preferredRunDay?: number;
   runWeeklyTarget?: number;
   maxRunDistanceKm?: number;
-  onToggleSession: (date: string, kind: ActivityKind) => Promise<void>;
+  onToggleSession: (date: string, kind: ActivityKind, distanceKm?: number) => Promise<void>;
   onSwapSession: (date: string, kind: ActivityKind, swappedFor: SwapReason, notes?: string) => Promise<void>;
   onSwapKind?: (date: string, newKind: ActivityKind) => Promise<void>;
   onDeleteSession?: (sessionId: string) => Promise<void>;
+  onUpdateSessionActivity?: (sessionId: string, distanceKm: number, durationMin?: number) => Promise<void>;
   onAddNote: (date: string, kind: ActivityKind, notes: string) => Promise<void>;
   onOpenWorkoutSuggestions?: () => void;
 }
@@ -78,6 +79,7 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   onSwapSession,
   onSwapKind,
   onDeleteSession,
+  onUpdateSessionActivity,
   onAddNote,
   onOpenWorkoutSuggestions
 }) => {
@@ -94,6 +96,7 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
     isRunSlot?: boolean;
   } | null>(null);
   const [noteInput, setNoteInput] = useState('');
+  const [runDistanceInput, setRunDistanceInput] = useState('');
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
 
@@ -139,6 +142,10 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
       triggerHaptic();
       setSelectedSlot({ date, kind, session, isRunSlot });
       setNoteInput(session?.notes || '');
+      if (isRunSlot) {
+        const currentKm = session?.activity?.distanceKm || (session?.kind === 'parkrun' ? 5 : maxRunDistanceKm);
+        setRunDistanceInput(String(currentKm || maxRunDistanceKm || 5));
+      }
     }, 500);
   };
 
@@ -400,6 +407,71 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
                   </div>
                   <span className="text-[10px] text-rose-300 uppercase font-bold">Remove</span>
                 </button>
+              )}
+
+              {/* Run Slot Distance Picker & Actions */}
+              {selectedSlot.isRunSlot && (
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Footprints className="w-3.5 h-3.5 text-rose-400" />
+                      Run Distance
+                    </span>
+                    <span className="text-xs font-mono font-bold text-rose-300">
+                      {runDistanceInput ? `${runDistanceInput} km` : `${maxRunDistanceKm} km`}
+                    </span>
+                  </div>
+
+                  {/* Preset Pills */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[3.0, 5.0, 8.0, 10.0].map((km) => (
+                      <button
+                        type="button"
+                        key={km}
+                        onClick={() => setRunDistanceInput(String(km))}
+                        className={`py-1.5 rounded-xl text-xs font-bold border transition ${
+                          parseFloat(runDistanceInput) === km
+                            ? 'bg-rose-500 text-slate-950 border-rose-400 font-black'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        {km}k
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Distance Input & Apply Button */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.5"
+                      placeholder="e.g. 6.5"
+                      value={runDistanceInput}
+                      onChange={(e) => setRunDistanceInput(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-rose-400 font-mono"
+                    />
+                    <button
+                      type="button"
+                      disabled={!runDistanceInput || parseFloat(runDistanceInput) <= 0}
+                      onClick={async () => {
+                        const dist = parseFloat(runDistanceInput) || 5.0;
+                        if (hasCompletedRunThisWeek && completedRunSession) {
+                          if (onUpdateSessionActivity) {
+                            await onUpdateSessionActivity(completedRunSession.id, dist);
+                          }
+                        } else {
+                          const targetLogDate = todayStr >= selectedSlot.date ? todayStr : selectedSlot.date;
+                          await onToggleSession(targetLogDate, 'run', dist);
+                        }
+                        setSelectedSlot(null);
+                      }}
+                      className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl active-press"
+                    >
+                      {hasCompletedRunThisWeek && completedRunSession ? 'Update Distance' : 'Log Run'}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* If it's a run slot, offer to pick suggested workout */}

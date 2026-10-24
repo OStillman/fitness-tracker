@@ -216,8 +216,8 @@ export const App: React.FC = () => {
     setIsGoalsModalOpen(false);
   };
 
-  // 1-Tap Toggle for Target Week Slots
-  const handleToggleSession = async (date: string, kind: ActivityKind) => {
+  // 1-Tap Toggle for Target Week Slots (supports custom run distance)
+  const handleToggleSession = async (date: string, kind: ActivityKind, distanceKm?: number) => {
     const existing = sessions.find(
       (s) =>
         s.date === date &&
@@ -227,7 +227,8 @@ export const App: React.FC = () => {
     );
     const now = Date.now();
     const isRun = kind === 'run';
-    const defaultRunKm = userGoals.maxRunDistanceKm ?? 5;
+    const chosenRunKm = distanceKm ?? userGoals.maxRunDistanceKm ?? 5;
+    const estDuration = Math.round(chosenRunKm * 5.5);
 
     if (existing) {
       if (existing.done) {
@@ -246,8 +247,8 @@ export const App: React.FC = () => {
           activity: isRun
             ? {
                 kind: 'run',
-                distanceKm: defaultRunKm,
-                durationMin: Math.round(defaultRunKm * 6)
+                distanceKm: chosenRunKm,
+                durationMin: estDuration
               }
             : existing.activity,
           updatedAt: now,
@@ -264,8 +265,8 @@ export const App: React.FC = () => {
         activity: isRun
           ? {
               kind: 'run',
-              distanceKm: defaultRunKm,
-              durationMin: Math.round(defaultRunKm * 6)
+              distanceKm: chosenRunKm,
+              durationMin: estDuration
             }
           : undefined,
         updatedAt: now,
@@ -275,6 +276,25 @@ export const App: React.FC = () => {
     }
 
     syncWithServer();
+  };
+
+  // Update activity distance/duration for a logged session
+  const handleUpdateSessionActivity = async (sessionId: string, distanceKm: number, durationMin?: number) => {
+    const existing = await db.sessions.get(sessionId);
+    if (existing) {
+      const now = Date.now();
+      const mins = durationMin || Math.round(distanceKm * 5.5);
+      await db.sessions.update(sessionId, {
+        activity: {
+          kind: existing.activity?.kind || 'run',
+          distanceKm,
+          durationMin: mins
+        },
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+      syncWithServer();
+    }
   };
 
   // Swap Slot (e.g. TRT conflict or Saturday Parkrun swap)
@@ -661,6 +681,7 @@ export const App: React.FC = () => {
           onSwapSession={handleSwapSession}
           onSwapKind={handleSwapKind}
           onDeleteSession={handleDeleteSession}
+          onUpdateSessionActivity={handleUpdateSessionActivity}
           onAddNote={handleAddNote}
           onOpenWorkoutSuggestions={() => {
             setGoalsModalTab('suggestions');

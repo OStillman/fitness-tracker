@@ -202,13 +202,25 @@ export function formatTimeMMSS(totalSeconds: number): string {
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
-export function getParkrunPBs(sessions: Session[]): { overallPB: ParkrunPBRecord | null; coursePBs: ParkrunPBRecord[] } {
+export interface LastParkrunInfo {
+  eventName: string;
+  date: string;
+  timeSeconds?: number;
+  weeksAgo: number;
+}
+
+export function getParkrunPBs(sessions: Session[]): {
+  overallPB: ParkrunPBRecord | null;
+  coursePBs: ParkrunPBRecord[];
+  lastParkrun: LastParkrunInfo | null;
+  totalRunsCount: number;
+} {
   const parkrunSessions = sessions.filter(
     (s) => s.kind === 'parkrun' && s.done && s.parkrun?.timeSeconds && s.parkrun.timeSeconds > 0
   );
 
   if (parkrunSessions.length === 0) {
-    return { overallPB: null, coursePBs: [] };
+    return { overallPB: null, coursePBs: [], lastParkrun: null, totalRunsCount: 0 };
   }
 
   // Find overall fastest
@@ -228,6 +240,29 @@ export function getParkrunPBs(sessions: Session[]): { overallPB: ParkrunPBRecord
     }
   }
 
+  // Determine last parkrun (excluding baseline 2020 placeholders if actual runs exist)
+  const realDateRuns = parkrunSessions.filter(
+    (s) => s.date !== '2020-01-01' && !s.notes?.includes('Historical Course PB (Previous)')
+  );
+  const candidates = realDateRuns.length > 0 ? realDateRuns : parkrunSessions;
+  candidates.sort((a, b) => b.date.localeCompare(a.date));
+  const mostRecent = candidates[0];
+
+  let lastParkrun: LastParkrunInfo | null = null;
+  if (mostRecent) {
+    const today = new Date();
+    const runDate = parseDateStr(mostRecent.date);
+    const diffMs = today.getTime() - runDate.getTime();
+    const weeksAgo = Math.max(0, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)));
+
+    lastParkrun = {
+      eventName: mostRecent.parkrun!.eventName,
+      date: mostRecent.date,
+      timeSeconds: mostRecent.parkrun?.timeSeconds,
+      weeksAgo
+    };
+  }
+
   const overallPB: ParkrunPBRecord = {
     eventName: overallBest.parkrun!.eventName,
     bestTimeSeconds: overallBest.parkrun!.timeSeconds!,
@@ -242,7 +277,12 @@ export function getParkrunPBs(sessions: Session[]): { overallPB: ParkrunPBRecord
     isOverallPB: s.id === overallBest.id
   })).sort((a, b) => a.bestTimeSeconds - b.bestTimeSeconds);
 
-  return { overallPB, coursePBs };
+  return {
+    overallPB,
+    coursePBs,
+    lastParkrun,
+    totalRunsCount: parkrunSessions.length
+  };
 }
 
 export interface CardioTotals {
