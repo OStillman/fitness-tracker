@@ -30,6 +30,7 @@ syncRouter.get('/goals', async (c) => {
       preferredRunDay: row.preferred_run_day ?? 1,
       cycleWeeklyTarget: row.cycle_weekly_target,
       maxRunDistanceKm: row.max_run_distance_km,
+      parkrunAthleteId: row.parkrun_athlete_id || '',
       updatedAt: row.updated_at
     }
   });
@@ -41,8 +42,8 @@ syncRouter.put('/goals', async (c) => {
   const now = Date.now();
 
   const upsert = db.prepare(`
-    INSERT INTO user_goals (id, user_id, brizfit_weekly_target, brizfit_target_days, run_weekly_target, preferred_run_day, cycle_weekly_target, max_run_distance_km, updated_at)
-    VALUES ('current_goals', @user_id, @brizfit_weekly_target, @brizfit_target_days, @run_weekly_target, @preferred_run_day, @cycle_weekly_target, @max_run_distance_km, @updated_at)
+    INSERT INTO user_goals (id, user_id, brizfit_weekly_target, brizfit_target_days, run_weekly_target, preferred_run_day, cycle_weekly_target, max_run_distance_km, parkrun_athlete_id, updated_at)
+    VALUES ('current_goals', @user_id, @brizfit_weekly_target, @brizfit_target_days, @run_weekly_target, @preferred_run_day, @cycle_weekly_target, @max_run_distance_km, @parkrun_athlete_id, @updated_at)
     ON CONFLICT(id) DO UPDATE SET
       user_id = excluded.user_id,
       brizfit_weekly_target = excluded.brizfit_weekly_target,
@@ -51,6 +52,7 @@ syncRouter.put('/goals', async (c) => {
       preferred_run_day = excluded.preferred_run_day,
       cycle_weekly_target = excluded.cycle_weekly_target,
       max_run_distance_km = excluded.max_run_distance_km,
+      parkrun_athlete_id = excluded.parkrun_athlete_id,
       updated_at = excluded.updated_at
   `);
 
@@ -62,7 +64,8 @@ syncRouter.put('/goals', async (c) => {
     preferred_run_day: body.preferredRunDay ?? 1,
     cycle_weekly_target: body.cycleWeeklyTarget ?? 0,
     max_run_distance_km: body.maxRunDistanceKm ?? 5.0,
-    updated_at: body.updatedAt || now
+    parkrun_athlete_id: body.parkrunAthleteId || null,
+    updatedAt: body.updatedAt || now
   });
 
   return c.json({ success: true, updatedAt: body.updatedAt || now });
@@ -148,8 +151,8 @@ syncRouter.post('/', async (c) => {
     // Persist goals if client sent updated goals
     if (goals && typeof goals === 'object') {
       const upsertGoalsStmt = db.prepare(`
-        INSERT INTO user_goals (id, user_id, brizfit_weekly_target, brizfit_target_days, run_weekly_target, preferred_run_day, cycle_weekly_target, max_run_distance_km, updated_at)
-        VALUES ('current_goals', @user_id, @brizfit_weekly_target, @brizfit_target_days, @run_weekly_target, @preferred_run_day, @cycle_weekly_target, @max_run_distance_km, @updated_at)
+        INSERT INTO user_goals (id, user_id, brizfit_weekly_target, brizfit_target_days, run_weekly_target, preferred_run_day, cycle_weekly_target, max_run_distance_km, parkrun_athlete_id, updated_at)
+        VALUES ('current_goals', @user_id, @brizfit_weekly_target, @brizfit_target_days, @run_weekly_target, @preferred_run_day, @cycle_weekly_target, @max_run_distance_km, @parkrun_athlete_id, @updated_at)
         ON CONFLICT(id) DO UPDATE SET
           user_id = excluded.user_id,
           brizfit_weekly_target = excluded.brizfit_weekly_target,
@@ -158,6 +161,7 @@ syncRouter.post('/', async (c) => {
           preferred_run_day = excluded.preferred_run_day,
           cycle_weekly_target = excluded.cycle_weekly_target,
           max_run_distance_km = excluded.max_run_distance_km,
+          parkrun_athlete_id = excluded.parkrun_athlete_id,
           updated_at = excluded.updated_at
         WHERE excluded.updated_at >= user_goals.updated_at
       `);
@@ -170,6 +174,7 @@ syncRouter.post('/', async (c) => {
         preferred_run_day: goals.preferredRunDay ?? 1,
         cycle_weekly_target: goals.cycleWeeklyTarget ?? 0,
         max_run_distance_km: goals.maxRunDistanceKm ?? 5.0,
+        parkrun_athlete_id: goals.parkrunAthleteId || null,
         updated_at: goals.updatedAt || now
       });
     }
@@ -234,6 +239,7 @@ syncRouter.post('/', async (c) => {
       preferredRunDay: currentGoalRow.preferred_run_day ?? 1,
       cycleWeeklyTarget: currentGoalRow.cycle_weekly_target,
       maxRunDistanceKm: currentGoalRow.max_run_distance_km,
+      parkrunAthleteId: currentGoalRow.parkrun_athlete_id || '',
       updatedAt: currentGoalRow.updated_at,
       syncStatus: 'synced'
     };

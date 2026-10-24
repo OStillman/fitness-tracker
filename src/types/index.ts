@@ -36,6 +36,7 @@ export interface UserGoals {
   preferredRunDay: number;     // default: 1 (Monday)
   cycleWeeklyTarget: number;   // default: 0
   maxRunDistanceKm: number;    // default: 5 (max distance km for suggestions)
+  parkrunAthleteId?: string;   // e.g. "A1234567"
   updatedAt: number;
   syncStatus?: 'synced' | 'pending';
 }
@@ -49,6 +50,7 @@ export const DEFAULT_USER_GOALS: UserGoals = {
   preferredRunDay: 1, // Monday
   cycleWeeklyTarget: 0,
   maxRunDistanceKm: 5,
+  parkrunAthleteId: '',
   updatedAt: 0,
   syncStatus: 'pending'
 };

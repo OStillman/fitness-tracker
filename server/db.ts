@@ -82,6 +82,7 @@ export function initDatabase() {
       preferred_run_day INTEGER DEFAULT 1,
       cycle_weekly_target INTEGER DEFAULT 0,
       max_run_distance_km REAL DEFAULT 5.0,
+      parkrun_athlete_id TEXT,
       updated_at INTEGER NOT NULL
     );
 
@@ -94,6 +95,10 @@ export function initDatabase() {
     const hasPreferredRunDay = columns.some((col: any) => col.name === 'preferred_run_day');
     if (!hasPreferredRunDay) {
       db.exec('ALTER TABLE user_goals ADD COLUMN preferred_run_day INTEGER DEFAULT 1');
+    }
+    const hasAthleteId = columns.some((col: any) => col.name === 'parkrun_athlete_id');
+    if (!hasAthleteId) {
+      db.exec('ALTER TABLE user_goals ADD COLUMN parkrun_athlete_id TEXT');
     }
   } catch (migErr) {
     // Table may have just been created with the column

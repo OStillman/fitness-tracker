@@ -136,3 +136,173 @@ integrationsRouter.post('/activity/:id/resolve', async (c) => {
     action
   });
 });
+
+// 4. Official Parkrun Website Sync Endpoint
+function parseParkrunResultsHtml(html: string) {
+  const results: { date: string; eventName: string; position?: number; timeSeconds: number }[] = [];
+  const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch;
+
+  while ((trMatch = trRegex.exec(html)) !== null) {
+    const rowHtml = trMatch[1];
+    const tdMatches: string[] = [];
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let tdMatch;
+    while ((tdMatch = tdRegex.exec(rowHtml)) !== null) {
+      const cellText = tdMatch[1].replace(/<[^>]+>/g, '').trim();
+      tdMatches.push(cellText);
+    }
+
+    // A valid parkrun table row has at least 5 cells: Date, Event, Run#, Pos, Time
+    if (tdMatches.length >= 5) {
+      const rawDate = tdMatches[0];
+      const rawEvent = tdMatches[1];
+      const rawPos = tdMatches[3];
+      const rawTime = tdMatches[4];
+
+      const dateParts = rawDate.split('/');
+      if (dateParts.length === 3 && dateParts[2].length === 4) {
+        const d = dateParts[0].padStart(2, '0');
+        const m = dateParts[1].padStart(2, '0');
+        const y = dateParts[2];
+        const dateIso = `${y}-${m}-${d}`;
+
+        let eventName = rawEvent.replace(/\s*parkrun\s*$/i, '').trim();
+        if (!eventName) eventName = 'Parkrun';
+
+        const timeParts = rawTime.split(':').map((x) => parseInt(x, 10));
+        let timeSeconds = 0;
+        if (timeParts.length === 2 && !isNaN(timeParts[0]) && !isNaN(timeParts[1])) {
+          timeSeconds = timeParts[0] * 60 + timeParts[1];
+        } else if (timeParts.length === 3 && !isNaN(timeParts[0]) && !isNaN(timeParts[1]) && !isNaN(timeParts[2])) {
+          timeSeconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+        }
+
+        const position = parseInt(rawPos, 10);
+
+        if (timeSeconds > 0) {
+          results.push({
+            date: dateIso,
+            eventName,
+            position: !isNaN(position) ? position : undefined,
+            timeSeconds
+          });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+integrationsRouter.post('/parkrun/sync', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const rawId = String(body.athleteId || '').trim();
+  const cleanId = rawId.replace(/^a/i, '').trim();
+
+  if (!cleanId || !/^\d+$/.test(cleanId)) {
+    return c.json({ error: 'Please enter a valid Parkrun athlete number (e.g. A1234567 or 1234567)' }, 400);
+  }
+
+  const url = `https://www.parkrun.org.uk/parkrunner/${cleanId}/all/`;
+  console.log(`[ParkrunSync] Fetching official athlete results from ${url}...`);
+
+  let html = '';
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8'
+      }
+    });
+
+    if (!res.ok) {
+      return c.json({
+        error: `Could not fetch athlete profile from parkrun.org.uk (status ${res.status}). Please check your barcode number.`
+      }, res.status === 404 ? 404 : 502);
+    }
+
+    html = await res.text();
+  } catch (fetchErr: any) {
+    console.error('[ParkrunSync] Network error fetching parkrun:', fetchErr.message);
+    return c.json({ error: `Network error connecting to parkrun.org.uk: ${fetchErr.message}` }, 502);
+  }
+
+  const parsedRuns = parseParkrunResultsHtml(html);
+  if (parsedRuns.length === 0) {
+    return c.json({
+      error: `No parkrun results found for athlete A${cleanId}. Please check the barcode number.`
+    }, 404);
+  }
+
+  const now = Date.now();
+  const insertSession = db.prepare(`
+    INSERT INTO sessions (id, user_id, date, kind, done, notes, updated_at)
+    VALUES (@id, 'default_user', @date, 'parkrun', 1, @notes, @updated_at)
+    ON CONFLICT(id) DO UPDATE SET
+      date = excluded.date,
+      kind = excluded.kind,
+      done = excluded.done,
+      updated_at = excluded.updated_at
+  `);
+
+  const insertParkrun = db.prepare(`
+    INSERT INTO parkruns (id, session_id, event_name, time_seconds, position, updated_at)
+    VALUES (@id, @session_id, @event_name, @time_seconds, @position, @updated_at)
+    ON CONFLICT(id) DO UPDATE SET
+      event_name = excluded.event_name,
+      time_seconds = excluded.time_seconds,
+      position = excluded.position,
+      updated_at = excluded.updated_at
+  `);
+
+  const courseMap = new Map<string, number>();
+
+  const tx = db.transaction(() => {
+    for (const r of parsedRuns) {
+      const sessionId = `parkrun-official-${cleanId}-${r.date}`;
+      insertSession.run({
+        id: sessionId,
+        date: r.date,
+        notes: `Official Parkrun (Position ${r.position || 'N/A'})`,
+        updated_at: now
+      });
+
+      insertParkrun.run({
+        id: `pr-${sessionId}`,
+        session_id: sessionId,
+        event_name: r.eventName,
+        time_seconds: r.timeSeconds,
+        position: r.position || null,
+        updated_at: now
+      });
+
+      const currentCourseBest = courseMap.get(r.eventName);
+      if (!currentCourseBest || r.timeSeconds < currentCourseBest) {
+        courseMap.set(r.eventName, r.timeSeconds);
+      }
+    }
+
+    try {
+      db.prepare(`
+        UPDATE user_goals SET parkrun_athlete_id = ?, updated_at = ? WHERE id = 'current_goals'
+      `).run(`A${cleanId}`, now);
+    } catch (_) {}
+  });
+
+  tx();
+
+  console.log(`[ParkrunSync] Imported ${parsedRuns.length} runs across ${courseMap.size} circuits for A${cleanId}.`);
+
+  return c.json({
+    success: true,
+    athleteId: `A${cleanId}`,
+    importedCount: parsedRuns.length,
+    coursesCount: courseMap.size,
+    courses: Array.from(courseMap.entries()).map(([name, timeSecs]) => ({
+      eventName: name,
+      bestTimeSeconds: timeSecs
+    }))
+  });
+});

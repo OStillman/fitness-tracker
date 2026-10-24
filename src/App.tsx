@@ -318,6 +318,33 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // Sync official past parkruns from parkrun.org.uk
+  const handleSyncParkrunWebsite = async (athleteId: string) => {
+    const res = await fetch('/api/integrations/parkrun/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ athleteId })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Sync failed with status ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Pull the newly created sessions into local Dexie
+    localStorage.setItem('last_sync_timestamp', '0');
+    await syncWithServer();
+
+    return {
+      importedCount: data.importedCount,
+      coursesCount: data.coursesCount
+    };
+  };
+
   // Log Cycle, Run, or Walk
   const handleLogActivity = async (
     date: string,
@@ -468,7 +495,12 @@ export const App: React.FC = () => {
         <Heatmap sessions={sessions} />
 
         {/* Parkrun PB Records & Celebration */}
-        <ParkrunPB sessions={sessions} onSavePB={handleSaveCircuitPB} />
+        <ParkrunPB
+          sessions={sessions}
+          storedAthleteId={userGoals.parkrunAthleteId}
+          onSavePB={handleSaveCircuitPB}
+          onSyncWebsite={handleSyncParkrunWebsite}
+        />
 
         {/* Monthly Cardio Breakdown: Rides, Runs, Walks */}
         <CardioStats sessions={sessions} />
