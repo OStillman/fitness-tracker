@@ -1,4 +1,4 @@
-import type { Session, WeekStatus, ParkrunPBRecord } from '../types';
+import type { Session, ParkrunPBRecord } from '../types';
 
 export function getWeekStart(d: Date): Date {
   const date = new Date(d);
@@ -108,7 +108,6 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
   // Otherwise, start checking backwards from the previous week.
   const prevWeekMonday = new Date(getWeekStart(today));
   prevWeekMonday.setDate(prevWeekMonday.getDate() - 7);
-  const prevWeekStr = formatDateStr(prevWeekMonday);
 
   let checkDate = thisWeekMet ? new Date(getWeekStart(today)) : prevWeekMonday;
 

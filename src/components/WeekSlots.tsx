@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Check, Flame, MessageSquare, AlertTriangle, X } from 'lucide-react';
+import { Check, Flame, AlertTriangle, X } from 'lucide-react';
 import type { Session, ActivityKind, SwapReason } from '../types';
 import { formatDateStr, parseDateStr } from '../utils/streak';
 

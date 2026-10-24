@@ -26,7 +26,7 @@ export async function handleAuthCallback(): Promise<User | null> {
     try {
       const user = await userManager.signinCallback();
       window.history.replaceState({}, document.title, '/');
-      return user;
+      return user ?? null;
     } catch (err) {
       console.error('Pocket-ID login callback failed:', err);
       window.history.replaceState({}, document.title, '/');
@@ -38,7 +38,7 @@ export async function handleAuthCallback(): Promise<User | null> {
 export async function getAuthToken(): Promise<string | null> {
   const user = await userManager.getUser();
   if (user && !user.expired) {
-    return user.access_token || user.id_token;
+    return user.access_token || user.id_token || null;
   }
   return null;
 }

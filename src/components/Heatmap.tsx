@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Session } from '../types';
-import { formatDateStr, parseDateStr } from '../utils/streak';
+import { formatDateStr } from '../utils/streak';
 
 interface HeatmapProps {
   sessions: Session[];

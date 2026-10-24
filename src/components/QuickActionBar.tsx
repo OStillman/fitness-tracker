@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Bike, Footprints, Flame, Timer, ChevronDown, Check } from 'lucide-react';
-import type { ActivityKind } from '../types';
+import { Plus, Bike, Footprints, Flame } from 'lucide-react';
 import { formatDateStr } from '../utils/streak';
 
 interface QuickActionBarProps {

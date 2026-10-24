@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Session, ActivityKind } from '../types';
+import type { Session } from '../types';
 
 export class FitnessDB extends Dexie {
   sessions!: Table<Session, string>;
