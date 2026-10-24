@@ -18,7 +18,8 @@ import {
   loginWithPocketId,
   handleAuthCallback,
   getPocketIdAuthority,
-  restoreOrRenewSession
+  restoreOrRenewSession,
+  getAuthToken
 } from './auth/pocketId';
 import { saveUserGoals } from './db';
 import type { User } from 'oidc-client-ts';
@@ -320,12 +321,16 @@ export const App: React.FC = () => {
 
   // Sync official past parkruns from parkrun.org.uk
   const handleSyncParkrunWebsite = async (athleteId: string) => {
+    const token = await getAuthToken();
+    const cleanId = athleteId.replace(/^a/i, '').trim();
+
     const res = await fetch('/api/integrations/parkrun/sync', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
-      body: JSON.stringify({ athleteId })
+      body: JSON.stringify({ athleteId: cleanId })
     });
 
     if (!res.ok) {
@@ -334,6 +339,14 @@ export const App: React.FC = () => {
     }
 
     const data = await res.json();
+
+    // Persist athlete ID to local goals reactive state
+    const currentG = (await db.goals.get('current_goals')) || DEFAULT_USER_GOALS;
+    await saveUserGoals({
+      ...currentG,
+      parkrunAthleteId: `A${cleanId}`,
+      updatedAt: Date.now()
+    });
 
     // Pull the newly created sessions into local Dexie
     localStorage.setItem('last_sync_timestamp', '0');

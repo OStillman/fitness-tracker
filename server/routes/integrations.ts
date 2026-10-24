@@ -153,40 +153,67 @@ function parseParkrunResultsHtml(html: string) {
       tdMatches.push(cellText);
     }
 
-    // A valid parkrun table row has at least 5 cells: Date, Event, Run#, Pos, Time
+    // A valid parkrun athlete table row has at least 5 cells:
+    // Format on parkrun.org.uk: [0] Event, [1] Run Date, [2] Run Number, [3] Pos, [4] Time, [5] AgeGrade, [6] PB?
     if (tdMatches.length >= 5) {
-      const rawDate = tdMatches[0];
-      const rawEvent = tdMatches[1];
-      const rawPos = tdMatches[3];
-      const rawTime = tdMatches[4];
+      let rawEvent = '';
+      let rawDate = '';
+      let rawPos = '';
+      let rawTime = '';
 
-      const dateParts = rawDate.split('/');
-      if (dateParts.length === 3 && dateParts[2].length === 4) {
-        const d = dateParts[0].padStart(2, '0');
-        const m = dateParts[1].padStart(2, '0');
-        const y = dateParts[2];
-        const dateIso = `${y}-${m}-${d}`;
+      const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
 
-        let eventName = rawEvent.replace(/\s*parkrun\s*$/i, '').trim();
-        if (!eventName) eventName = 'Parkrun';
-
-        const timeParts = rawTime.split(':').map((x) => parseInt(x, 10));
-        let timeSeconds = 0;
-        if (timeParts.length === 2 && !isNaN(timeParts[0]) && !isNaN(timeParts[1])) {
-          timeSeconds = timeParts[0] * 60 + timeParts[1];
-        } else if (timeParts.length === 3 && !isNaN(timeParts[0]) && !isNaN(timeParts[1]) && !isNaN(timeParts[2])) {
-          timeSeconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+      // Detect layout: Event first vs Date first
+      if (datePattern.test(tdMatches[1].trim())) {
+        rawEvent = tdMatches[0];
+        rawDate = tdMatches[1];
+        rawPos = tdMatches[3];
+        rawTime = tdMatches[4];
+      } else if (datePattern.test(tdMatches[0].trim())) {
+        rawDate = tdMatches[0];
+        rawEvent = tdMatches[1];
+        rawPos = tdMatches[3];
+        rawTime = tdMatches[4];
+      } else {
+        // Fallback: search for date cell
+        const dateIdx = tdMatches.findIndex((cell) => datePattern.test(cell.trim()));
+        if (dateIdx !== -1) {
+          rawDate = tdMatches[dateIdx];
+          rawEvent = tdMatches[dateIdx === 0 ? 1 : 0];
+          rawPos = tdMatches[3];
+          rawTime = tdMatches[4];
         }
+      }
 
-        const position = parseInt(rawPos, 10);
+      if (rawDate && rawEvent) {
+        const dateParts = rawDate.split('/');
+        if (dateParts.length === 3 && dateParts[2].length === 4) {
+          const d = dateParts[0].padStart(2, '0');
+          const m = dateParts[1].padStart(2, '0');
+          const y = dateParts[2];
+          const dateIso = `${y}-${m}-${d}`;
 
-        if (timeSeconds > 0) {
-          results.push({
-            date: dateIso,
-            eventName,
-            position: !isNaN(position) ? position : undefined,
-            timeSeconds
-          });
+          let eventName = rawEvent.replace(/\s*parkrun\s*$/i, '').trim();
+          if (!eventName) eventName = 'Parkrun';
+
+          const timeParts = rawTime.split(':').map((x) => parseInt(x, 10));
+          let timeSeconds = 0;
+          if (timeParts.length === 2 && !isNaN(timeParts[0]) && !isNaN(timeParts[1])) {
+            timeSeconds = timeParts[0] * 60 + timeParts[1];
+          } else if (timeParts.length === 3 && !isNaN(timeParts[0]) && !isNaN(timeParts[1]) && !isNaN(timeParts[2])) {
+            timeSeconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+          }
+
+          const position = parseInt(rawPos, 10);
+
+          if (timeSeconds > 0) {
+            results.push({
+              date: dateIso,
+              eventName,
+              position: !isNaN(position) ? position : undefined,
+              timeSeconds
+            });
+          }
         }
       }
     }
@@ -261,7 +288,8 @@ integrationsRouter.post('/parkrun/sync', async (c) => {
 
   const tx = db.transaction(() => {
     for (const r of parsedRuns) {
-      const sessionId = `parkrun-official-${cleanId}-${r.date}`;
+      const slug = r.eventName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const sessionId = `parkrun-official-${cleanId}-${r.date}-${slug}`;
       insertSession.run({
         id: sessionId,
         date: r.date,
@@ -286,7 +314,11 @@ integrationsRouter.post('/parkrun/sync', async (c) => {
 
     try {
       db.prepare(`
-        UPDATE user_goals SET parkrun_athlete_id = ?, updated_at = ? WHERE id = 'current_goals'
+        INSERT INTO user_goals (id, user_id, parkrun_athlete_id, updated_at)
+        VALUES ('current_goals', 'default_user', ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          parkrun_athlete_id = excluded.parkrun_athlete_id,
+          updated_at = excluded.updated_at
       `).run(`A${cleanId}`, now);
     } catch (_) {}
   });
