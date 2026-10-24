@@ -136,31 +136,59 @@ export const App: React.FC = () => {
       for (const [dateStr, daySessions] of weekSessionsByDate.entries()) {
         if (daySessions.length > 1) {
           const hasBrizfit = daySessions.some((s) => s.kind === 'brizfit');
-          const parkruns = daySessions.filter((s) => s.kind === 'parkrun');
+          const phantomRuns = daySessions.filter((s) => s.kind === 'run' || s.kind === 'parkrun');
 
-          // If user has Brizfit marked on Saturday, any extra parkruns logged on that date are misplaced PBs/ghosts
-          if (hasBrizfit && parkruns.length > 0) {
-            for (const pr of parkruns) {
-              console.log(`[AutoHeal] Relocating ghost parkrun on ${dateStr} (${pr.parkrun?.eventName || pr.id}) to baseline PB.`);
-              await db.sessions.update(pr.id, {
-                date: '2020-01-01',
-                notes: pr.notes || 'Historical Course PB',
-                updatedAt: Date.now(),
-                syncStatus: 'pending'
-              });
+          // If user has Brizfit marked on this day (e.g. Saturday), any run or parkrun logged on that same date is a conflict
+          if (hasBrizfit && phantomRuns.length > 0) {
+            for (const pr of phantomRuns) {
+              console.log(`[AutoHeal] Cleaning up phantom run on ${dateStr} (${pr.kind} - ${pr.id})`);
+              if (pr.kind === 'parkrun' && pr.parkrun?.eventName && pr.parkrun?.timeSeconds) {
+                // Course PB record: preserve it in 2020-01-01
+                await db.sessions.update(pr.id, {
+                  date: '2020-01-01',
+                  notes: pr.notes || 'Historical Course PB',
+                  updatedAt: Date.now(),
+                  syncStatus: 'pending'
+                });
+              } else {
+                // Accidental run: delete it
+                await db.sessions.delete(pr.id);
+                try {
+                  const token = await getAuthToken();
+                  if (token) {
+                    fetch(`/api/sync/session/${encodeURIComponent(pr.id)}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${token}` }
+                    }).catch(() => {});
+                  }
+                } catch (_) {}
+              }
               needsSync = true;
             }
-          } else if (parkruns.length > 1) {
-            // Multiple parkruns on the same date: keep only the first, relocate others to past baseline PB
-            for (let i = 1; i < parkruns.length; i++) {
-              const extraPr = parkruns[i];
-              console.log(`[AutoHeal] Relocating duplicate parkrun on ${dateStr} (${extraPr.parkrun?.eventName}) to baseline PB.`);
-              await db.sessions.update(extraPr.id, {
-                date: '2020-01-01',
-                notes: extraPr.notes || 'Historical Course PB',
-                updatedAt: Date.now(),
-                syncStatus: 'pending'
-              });
+          } else if (phantomRuns.length > 1) {
+            // Multiple runs on the same date: keep only the first, relocate/remove others
+            for (let i = 1; i < phantomRuns.length; i++) {
+              const extraPr = phantomRuns[i];
+              console.log(`[AutoHeal] Removing duplicate run on ${dateStr} (${extraPr.id})`);
+              if (extraPr.kind === 'parkrun' && extraPr.parkrun?.eventName) {
+                await db.sessions.update(extraPr.id, {
+                  date: '2020-01-01',
+                  notes: extraPr.notes || 'Historical Course PB',
+                  updatedAt: Date.now(),
+                  syncStatus: 'pending'
+                });
+              } else {
+                await db.sessions.delete(extraPr.id);
+                try {
+                  const token = await getAuthToken();
+                  if (token) {
+                    fetch(`/api/sync/session/${encodeURIComponent(extraPr.id)}`, {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${token}` }
+                    }).catch(() => {});
+                  }
+                } catch (_) {}
+              }
               needsSync = true;
             }
           }
@@ -190,14 +218,20 @@ export const App: React.FC = () => {
 
   // 1-Tap Toggle for Target Week Slots
   const handleToggleSession = async (date: string, kind: ActivityKind) => {
-    const existing = sessions.find((s) => s.date === date);
+    const existing = sessions.find(
+      (s) =>
+        s.date === date &&
+        (kind === 'run' ? (s.kind === 'run' || s.kind === 'parkrun') : s.kind === kind) &&
+        !s.notes?.includes('Historical') &&
+        !s.id.startsWith('parkrun-pb-')
+    );
     const now = Date.now();
     const isRun = kind === 'run';
     const defaultRunKm = userGoals.maxRunDistanceKm ?? 5;
 
     if (existing) {
       if (existing.done) {
-        // Untoggle
+        // Untoggle (or remove if it was an extra run session)
         await db.sessions.update(existing.id, {
           done: false,
           updatedAt: now,

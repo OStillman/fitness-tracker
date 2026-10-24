@@ -153,8 +153,12 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
       if (slot.isRunSlot) {
         // Run slot toggle
         if (hasCompletedRunThisWeek && completedRunSession) {
-          // Untoggle the existing run session
-          await onToggleSession(completedRunSession.date, completedRunSession.kind);
+          // Untoggle or remove the completed run session
+          if (onDeleteSession) {
+            await onDeleteSession(completedRunSession.id);
+          } else {
+            await onToggleSession(completedRunSession.date, completedRunSession.kind);
+          }
         } else {
           // Mark run done for today (or for slot date if today is before)
           const targetLogDate = todayStr >= date ? todayStr : date;
@@ -377,6 +381,27 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
             </div>
 
             <div className="space-y-2.5">
+              {/* If it's a run slot and a run is currently completed, offer to untoggle/remove it */}
+              {selectedSlot.isRunSlot && completedRunSession && (
+                <button
+                  onClick={async () => {
+                    if (onDeleteSession) {
+                      await onDeleteSession(completedRunSession.id);
+                    } else {
+                      await onToggleSession(completedRunSession.date, completedRunSession.kind);
+                    }
+                    setSelectedSlot(null);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-200 flex items-center justify-between text-sm font-semibold active-press"
+                >
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>Untoggle / Remove Logged Run ({completedRunSession.date})</span>
+                  </div>
+                  <span className="text-[10px] text-rose-300 uppercase font-bold">Remove</span>
+                </button>
+              )}
+
               {/* If it's a run slot, offer to pick suggested workout */}
               {selectedSlot.isRunSlot && onOpenWorkoutSuggestions && (
                 <button
@@ -479,8 +504,12 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
 
               {/* All Sessions Recorded on this Date */}
               {(() => {
+                const isRun = selectedSlot.isRunSlot;
                 const daySessions = sessions.filter(
-                  (s) => s.date === selectedSlot.date && !s.notes?.includes('Historical') && !s.id.startsWith('parkrun-pb-')
+                  (s) =>
+                    (s.date === selectedSlot.date || (isRun && s.id === completedRunSession?.id)) &&
+                    !s.notes?.includes('Historical') &&
+                    !s.id.startsWith('parkrun-pb-')
                 );
                 if (daySessions.length === 0) return null;
                 return (
