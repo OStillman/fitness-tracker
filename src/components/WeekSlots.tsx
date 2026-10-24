@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Check, Flame, AlertTriangle, X, Footprints, Sparkles } from 'lucide-react';
+import { Check, Flame, AlertTriangle, X, Footprints, Sparkles, Trash2 } from 'lucide-react';
 import type { Session, ActivityKind, SwapReason } from '../types';
 import { formatDateStr, parseDateStr } from '../utils/streak';
 
@@ -12,6 +12,7 @@ interface WeekSlotsProps {
   onToggleSession: (date: string, kind: ActivityKind) => Promise<void>;
   onSwapSession: (date: string, kind: ActivityKind, swappedFor: SwapReason, notes?: string) => Promise<void>;
   onSwapKind?: (date: string, newKind: ActivityKind) => Promise<void>;
+  onDeleteSession?: (sessionId: string) => Promise<void>;
   onAddNote: (date: string, kind: ActivityKind, notes: string) => Promise<void>;
   onOpenWorkoutSuggestions?: () => void;
 }
@@ -76,6 +77,7 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
   onToggleSession,
   onSwapSession,
   onSwapKind,
+  onDeleteSession,
   onAddNote,
   onOpenWorkoutSuggestions
 }) => {
@@ -474,6 +476,77 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* All Sessions Recorded on this Date */}
+              {(() => {
+                const daySessions = sessions.filter(
+                  (s) => s.date === selectedSlot.date && !s.notes?.includes('Historical') && !s.id.startsWith('parkrun-pb-')
+                );
+                if (daySessions.length === 0) return null;
+                return (
+                  <div className="pt-2 border-t border-slate-800">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Sessions Logged ({daySessions.length})
+                      </span>
+                      {daySessions.length > 1 && (
+                        <span className="text-[10px] text-amber-400 font-semibold">
+                          Multiple logged
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                      {daySessions.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800/80"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                s.kind === 'brizfit'
+                                  ? 'bg-emerald-400'
+                                  : s.kind === 'parkrun'
+                                  ? 'bg-amber-400'
+                                  : s.kind === 'cycle'
+                                  ? 'bg-cyan-400'
+                                  : 'bg-rose-400'
+                              }`}
+                            />
+                            <span className="text-xs font-bold text-white capitalize truncate">
+                              {s.kind === 'parkrun'
+                                ? `Parkrun ${s.parkrun?.eventName ? `(${s.parkrun.eventName})` : ''}`
+                                : s.kind === 'brizfit'
+                                ? 'Brizfit Class'
+                                : s.kind}
+                            </span>
+                            {s.notes && (
+                              <span className="text-[10px] text-slate-500 truncate">
+                                • {s.notes}
+                              </span>
+                            )}
+                          </div>
+                          {onDeleteSession && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await onDeleteSession(s.id);
+                                if (daySessions.length <= 1) {
+                                  setSelectedSlot(null);
+                                }
+                              }}
+                              className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition active-press shrink-0 ml-2"
+                              title="Delete this session"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

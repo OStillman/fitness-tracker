@@ -252,3 +252,12 @@ syncRouter.post('/', async (c) => {
     goals: serverGoals
   });
 });
+
+syncRouter.delete('/session/:id', async (c) => {
+  const id = c.req.param('id');
+  db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+  db.prepare('DELETE FROM parkruns WHERE session_id = ?').run(id);
+  db.prepare('DELETE FROM activities WHERE session_id = ?').run(id);
+  console.log(`[Sync] Deleted session "${id}" from server SQLite database.`);
+  return c.json({ success: true, id });
+});

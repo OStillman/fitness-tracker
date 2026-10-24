@@ -95,29 +95,82 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Self-heal: ensure historical PB benchmarks aren't scheduled in the current week
+  // Self-heal: ensure historical PB benchmarks aren't scheduled in the current week,
+  // and resolve ghost / duplicate sessions on target days (e.g. Saturday Brizfit vs Parkrun)
   useEffect(() => {
     if (!sessions || sessions.length === 0) return;
     const currentWeekMondayStr = formatDateStr(getWeekStart(new Date()));
-    const misplacedPBs = sessions.filter(
-      (s) =>
-        (s.id.startsWith('parkrun-pb-') || (s.kind === 'parkrun' && s.notes?.includes('Historical'))) &&
-        s.date >= currentWeekMondayStr
-    );
 
-    if (misplacedPBs.length > 0) {
-      console.log(`[AutoHeal] Relocating ${misplacedPBs.length} misplaced historical PB(s) out of the current week.`);
-      (async () => {
-        for (const s of misplacedPBs) {
-          await db.sessions.update(s.id, {
-            date: '2020-01-01',
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
-          });
+    (async () => {
+      let needsSync = false;
+
+      // 1. Relocate any explicit historical PB benchmarks out of the current week
+      const misplacedPBs = sessions.filter(
+        (s) =>
+          (s.id.startsWith('parkrun-pb-') || (s.kind === 'parkrun' && s.notes?.includes('Historical'))) &&
+          s.date >= currentWeekMondayStr
+      );
+
+      for (const s of misplacedPBs) {
+        console.log(`[AutoHeal] Relocating misplaced historical PB (${s.parkrun?.eventName || s.id}) to past.`);
+        await db.sessions.update(s.id, {
+          date: '2020-01-01',
+          notes: 'Historical Course PB',
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        });
+        needsSync = true;
+      }
+
+      // 2. Resolve duplicate / conflicting sessions on target class days in current week (e.g. Saturday)
+      const weekSessionsByDate = new Map<string, Session[]>();
+      for (const s of sessions) {
+        if (s.date >= currentWeekMondayStr && s.done) {
+          if (!weekSessionsByDate.has(s.date)) {
+            weekSessionsByDate.set(s.date, []);
+          }
+          weekSessionsByDate.get(s.date)!.push(s);
         }
+      }
+
+      for (const [dateStr, daySessions] of weekSessionsByDate.entries()) {
+        if (daySessions.length > 1) {
+          const hasBrizfit = daySessions.some((s) => s.kind === 'brizfit');
+          const parkruns = daySessions.filter((s) => s.kind === 'parkrun');
+
+          // If user has Brizfit marked on Saturday, any extra parkruns logged on that date are misplaced PBs/ghosts
+          if (hasBrizfit && parkruns.length > 0) {
+            for (const pr of parkruns) {
+              console.log(`[AutoHeal] Relocating ghost parkrun on ${dateStr} (${pr.parkrun?.eventName || pr.id}) to baseline PB.`);
+              await db.sessions.update(pr.id, {
+                date: '2020-01-01',
+                notes: pr.notes || 'Historical Course PB',
+                updatedAt: Date.now(),
+                syncStatus: 'pending'
+              });
+              needsSync = true;
+            }
+          } else if (parkruns.length > 1) {
+            // Multiple parkruns on the same date: keep only the first, relocate others to past baseline PB
+            for (let i = 1; i < parkruns.length; i++) {
+              const extraPr = parkruns[i];
+              console.log(`[AutoHeal] Relocating duplicate parkrun on ${dateStr} (${extraPr.parkrun?.eventName}) to baseline PB.`);
+              await db.sessions.update(extraPr.id, {
+                date: '2020-01-01',
+                notes: extraPr.notes || 'Historical Course PB',
+                updatedAt: Date.now(),
+                syncStatus: 'pending'
+              });
+              needsSync = true;
+            }
+          }
+        }
+      }
+
+      if (needsSync) {
         syncWithServer();
-      })();
-    }
+      }
+    })();
   }, [sessions]);
 
   const streakStats = computeStreakStats(sessions, userGoals);
@@ -251,6 +304,25 @@ export const App: React.FC = () => {
       });
     }
 
+    syncWithServer();
+  };
+
+  // Delete a specific session
+  const handleDeleteSession = async (sessionId: string) => {
+    await db.sessions.delete(sessionId);
+    try {
+      const token = await getAuthToken();
+      if (token) {
+        await fetch(`/api/sync/session/${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to delete session on server:', e);
+    }
     syncWithServer();
   };
 
@@ -554,6 +626,7 @@ export const App: React.FC = () => {
           onToggleSession={handleToggleSession}
           onSwapSession={handleSwapSession}
           onSwapKind={handleSwapKind}
+          onDeleteSession={handleDeleteSession}
           onAddNote={handleAddNote}
           onOpenWorkoutSuggestions={() => {
             setGoalsModalTab('suggestions');

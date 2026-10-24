@@ -61,9 +61,10 @@ export function computeStreakStats(
 
   // Calculate stats for current week
   const thisWeekSessions = weekMap.get(currentWeekMondayStr) || [];
-  let brizfitScore = 0;
-  let runScore = 0;
   let hasTrtConflict = false;
+
+  // Group active sessions by day to prevent any single day being double-counted
+  const dayKindsMap = new Map<string, Set<string>>();
 
   for (const s of thisWeekSessions) {
     // Historical benchmark PBs should NEVER count towards this week's active workouts
@@ -75,16 +76,29 @@ export function computeStreakStats(
       hasTrtConflict = true;
     }
     if (s.done) {
-      if (s.kind === 'brizfit') {
-        brizfitScore++;
-      } else if (s.kind === 'parkrun') {
-        // Saturday parkrun counts towards both Brizfit class replacement AND run goal
-        brizfitScore++;
-        runScore++;
-      } else if (s.kind === 'run') {
-        // Outdoor run on any day of the week
-        runScore++;
+      if (!dayKindsMap.has(s.date)) {
+        dayKindsMap.set(s.date, new Set());
       }
+      dayKindsMap.get(s.date)!.add(s.kind);
+    }
+  }
+
+  let brizfitScore = 0;
+  let runScore = 0;
+
+  for (const [dateStr, kinds] of dayKindsMap.entries()) {
+    if (kinds.has('brizfit')) {
+      // 1 class credit for Brizfit
+      brizfitScore++;
+    } else if (kinds.has('parkrun')) {
+      // Saturday parkrun without brizfit class counts as class replacement
+      brizfitScore++;
+    }
+
+    // Runs / parkruns count towards run goal
+    // If Saturday was swapped back to Brizfit class, don't count an orphan parkrun on that same day
+    if (kinds.has('run') || (kinds.has('parkrun') && !kinds.has('brizfit'))) {
+      runScore++;
     }
   }
 
@@ -107,20 +121,31 @@ export function computeStreakStats(
   const weekResults = new Map<string, boolean>();
   for (const wStr of sortedWeeks) {
     const weekSess = weekMap.get(wStr) || [];
-    let bScore = 0;
-    let rScore = 0;
+    const histDayKinds = new Map<string, Set<string>>();
+
     for (const s of weekSess) {
       if (s.notes?.includes('Historical') || s.id.startsWith('parkrun-pb-')) {
         continue;
       }
       if (s.done) {
-        if (s.kind === 'brizfit') bScore++;
-        else if (s.kind === 'parkrun') {
-          bScore++;
-          rScore++;
-        } else if (s.kind === 'run') {
-          rScore++;
+        if (!histDayKinds.has(s.date)) {
+          histDayKinds.set(s.date, new Set());
         }
+        histDayKinds.get(s.date)!.add(s.kind);
+      }
+    }
+
+    let bScore = 0;
+    let rScore = 0;
+
+    for (const [dStr, kinds] of histDayKinds.entries()) {
+      if (kinds.has('brizfit')) {
+        bScore++;
+      } else if (kinds.has('parkrun')) {
+        bScore++;
+      }
+      if (kinds.has('run') || (kinds.has('parkrun') && !kinds.has('brizfit'))) {
+        rScore++;
       }
     }
 
