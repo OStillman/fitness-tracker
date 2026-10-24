@@ -5,6 +5,7 @@ import { formatDateStr, parseDateStr } from '../utils/streak';
 
 interface WeekSlotsProps {
   sessions: Session[];
+  targetDays?: number[];
   onToggleSession: (date: string, kind: ActivityKind) => Promise<void>;
   onSwapSession: (date: string, kind: ActivityKind, swappedFor: SwapReason, notes?: string) => Promise<void>;
   onAddNote: (date: string, kind: ActivityKind, notes: string) => Promise<void>;
@@ -18,18 +19,32 @@ interface SlotConfig {
   timeHint: string;
 }
 
-const DEFAULT_SLOTS: SlotConfig[] = [
-  { dayName: 'Tuesday', dayOffset: 1, title: 'Brizfit', defaultKind: 'brizfit', timeHint: 'Evening' },
-  { dayName: 'Thursday', dayOffset: 3, title: 'Brizfit', defaultKind: 'brizfit', timeHint: 'Evening' },
-  { dayName: 'Saturday', dayOffset: 5, title: 'Brizfit / Parkrun', defaultKind: 'brizfit', timeHint: 'Morning' }
-];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function getSlotsFromDays(days: number[] = [2, 4, 6]): SlotConfig[] {
+  return days.map((d) => {
+    // d is 0..6 (0=Sun, 1=Mon, ..., 6=Sat)
+    const dayOffset = d === 0 ? 6 : d - 1; // offset relative to Monday
+    const dayName = DAY_NAMES[d];
+    const isSat = d === 6;
+    return {
+      dayName,
+      dayOffset,
+      title: isSat ? 'Brizfit / Parkrun' : 'Brizfit',
+      defaultKind: 'brizfit' as ActivityKind,
+      timeHint: isSat ? 'Morning' : 'Evening'
+    };
+  }).sort((a, b) => a.dayOffset - b.dayOffset);
+}
 
 export const WeekSlots: React.FC<WeekSlotsProps> = ({
   sessions,
+  targetDays = [2, 4, 6],
   onToggleSession,
   onSwapSession,
   onAddNote
 }) => {
+  const activeSlots = getSlotsFromDays(targetDays.length > 0 ? targetDays : [2, 4, 6]);
   const [selectedSlot, setSelectedSlot] = useState<{
     date: string;
     kind: ActivityKind;
@@ -91,8 +106,8 @@ export const WeekSlots: React.FC<WeekSlotsProps> = ({
         <span className="text-[11px] text-slate-500">Tap to mark • Hold to swap</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
-        {DEFAULT_SLOTS.map((slot) => {
+      <div className={`grid gap-2.5 ${activeSlots.length <= 2 ? 'grid-cols-2' : activeSlots.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+        {activeSlots.map((slot) => {
           const slotDate = new Date(monday);
           slotDate.setDate(monday.getDate() + slot.dayOffset);
           const dateStr = formatDateStr(slotDate);

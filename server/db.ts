@@ -72,6 +72,19 @@ export function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_pending_activities_status ON pending_activities(status);
+
+    CREATE TABLE IF NOT EXISTS user_goals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT 'default_user',
+      brizfit_weekly_target INTEGER DEFAULT 3,
+      brizfit_target_days TEXT DEFAULT '[2,4,6]',
+      run_weekly_target INTEGER DEFAULT 1,
+      cycle_weekly_target INTEGER DEFAULT 0,
+      max_run_distance_km REAL DEFAULT 5.0,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
   `);
 
   console.log(`[Database] Initialized SQLite database at ${dbPath}`);

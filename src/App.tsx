@@ -9,16 +9,22 @@ import { ParkrunPB, triggerPBConfetti } from './components/ParkrunPB';
 import { CardioStats } from './components/CardioStats';
 import { SettingsModal } from './components/SettingsModal';
 import { PendingActivityBanner } from './components/PendingActivityBanner';
-import { computeStreakStats, getParkrunPBs } from './utils/streak';
+import { WeeklyGoalCard } from './components/WeeklyGoalCard';
+import { GoalsAndSuggestionsModal } from './components/GoalsAndSuggestionsModal';
+import { computeStreakStats, getParkrunPBs, formatDateStr } from './utils/streak';
 import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
 import { getUserManager, loginWithPocketId, handleAuthCallback, getPocketIdAuthority } from './auth/pocketId';
+import { saveUserGoals } from './db';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
-import type { ActivityKind, Session, SwapReason, PendingActivity } from './types';
+import type { ActivityKind, Session, SwapReason, PendingActivity, UserGoals, SuggestedRunWorkout } from './types';
+import { DEFAULT_USER_GOALS } from './types';
 
 export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [goalsModalTab, setGoalsModalTab] = useState<'goals' | 'suggestions'>('goals');
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -26,6 +32,8 @@ export const App: React.FC = () => {
 
   // Subscribe to Dexie database updates reactively
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
+  const storedGoals = useLiveQuery(() => db.goals.get('current_goals'), []);
+  const userGoals: UserGoals = storedGoals || DEFAULT_USER_GOALS;
 
   // Listen for browser PWA install event
   useEffect(() => {
@@ -71,7 +79,20 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const streakStats = computeStreakStats(sessions);
+  const streakStats = computeStreakStats(sessions, userGoals);
+
+  // Save updated goals to Dexie and sync with server SQLite
+  const handleSaveGoals = async (updated: Partial<UserGoals>) => {
+    await saveUserGoals(updated);
+    await syncWithServer();
+  };
+
+  // 1-Tap Log suggested run workout
+  const handleLogSuggestedRun = async (workout: SuggestedRunWorkout) => {
+    const todayStr = formatDateStr(new Date());
+    await handleLogActivity(todayStr, 'run', workout.totalDistanceKm, workout.estimatedDurationMin);
+    setIsGoalsModalOpen(false);
+  };
 
   // 1-Tap Toggle for Target Week Slots
   const handleToggleSession = async (date: string, kind: ActivityKind) => {
@@ -317,6 +338,10 @@ export const App: React.FC = () => {
         syncState={syncState}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onTriggerSync={() => syncWithServer()}
+        onOpenGoals={() => {
+          setGoalsModalTab('goals');
+          setIsGoalsModalOpen(true);
+        }}
       />
 
       {/* Main Content Sections */}
@@ -324,9 +349,20 @@ export const App: React.FC = () => {
         {/* Pending Activity Banner from Strava / Home Assistant */}
         <PendingActivityBanner activities={pendingActivities} />
 
-        {/* Weekly Target Slots (Tue, Thu, Sat) */}
+        {/* Weekly Goals Progress (Brizfit + Weekly Run on Any Day) */}
+        <WeeklyGoalCard
+          stats={streakStats}
+          goals={userGoals}
+          onOpenGoalsModal={(tab) => {
+            setGoalsModalTab(tab || 'goals');
+            setIsGoalsModalOpen(true);
+          }}
+        />
+
+        {/* Weekly Target Slots (Tue, Thu, Sat or user custom days) */}
         <WeekSlots
           sessions={sessions}
+          targetDays={userGoals.brizfitTargetDays}
           onToggleSession={handleToggleSession}
           onSwapSession={handleSwapSession}
           onAddNote={handleAddNote}
@@ -354,6 +390,16 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onDataChanged={() => {}}
+      />
+
+      {/* Goals & Suggested Workouts Modal */}
+      <GoalsAndSuggestionsModal
+        isOpen={isGoalsModalOpen}
+        onClose={() => setIsGoalsModalOpen(false)}
+        currentGoals={userGoals}
+        onSaveGoals={handleSaveGoals}
+        onLogSuggestedRun={handleLogSuggestedRun}
+        initialTab={goalsModalTab}
       />
     </div>
   );

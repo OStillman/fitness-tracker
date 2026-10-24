@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Settings, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Flame, Settings, RefreshCw, AlertCircle, CheckCircle2, Target } from 'lucide-react';
 import type { StreakStats } from '../utils/streak';
 import type { SyncState } from '../sync/syncEngine';
 
@@ -8,13 +8,15 @@ interface HeaderProps {
   syncState: SyncState;
   onOpenSettings: () => void;
   onTriggerSync: () => void;
+  onOpenGoals?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   stats,
   syncState,
   onOpenSettings,
-  onTriggerSync
+  onTriggerSync,
+  onOpenGoals
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
@@ -41,9 +43,11 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Week Score & Actions */}
         <div className="flex items-center gap-2">
-          {/* Week Score Pill */}
-          <div
-            className={`px-3 py-1 rounded-full border text-xs font-semibold flex items-center gap-1.5 ${
+          {/* Week Score Pill - Clickable to open goals */}
+          <button
+            onClick={onOpenGoals}
+            title="Click to view weekly goals & suggestions"
+            className={`px-3 py-1 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition hover:brightness-125 active-press ${
               stats.thisWeekMet
                 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
                 : stats.hasTrtPendingMakeup
@@ -60,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
               {stats.thisWeekScore}/{stats.thisWeekTarget}
             </span>
             <span className="text-[10px] text-slate-400 uppercase font-bold">this wk</span>
-          </div>
+          </button>
 
           {/* Sync Trigger Button */}
           <button

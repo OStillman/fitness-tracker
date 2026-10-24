@@ -1,4 +1,5 @@
-import type { Session, ParkrunPBRecord } from '../types';
+import type { Session, ParkrunPBRecord, UserGoals } from '../types';
+import { DEFAULT_USER_GOALS } from '../types';
 
 export function getWeekStart(d: Date): Date {
   const date = new Date(d);
@@ -28,11 +29,23 @@ export interface StreakStats {
   thisWeekTarget: number;
   thisWeekMet: boolean;
   hasTrtPendingMakeup: boolean;
+  brizfitScore: number;
+  brizfitTarget: number;
+  brizfitMet: boolean;
+  runScore: number;
+  runTarget: number;
+  runMet: boolean;
 }
 
-export function computeStreakStats(sessions: Session[]): StreakStats {
+export function computeStreakStats(
+  sessions: Session[],
+  goals: UserGoals = DEFAULT_USER_GOALS
+): StreakStats {
   const today = new Date();
   const currentWeekMondayStr = formatDateStr(getWeekStart(today));
+
+  const brizfitTarget = goals.brizfitWeeklyTarget ?? 3;
+  const runTarget = goals.runWeeklyTarget ?? 1;
 
   // Map of weekStart -> sessions in that week
   const weekMap = new Map<string, Session[]>();
@@ -48,7 +61,8 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
 
   // Calculate stats for current week
   const thisWeekSessions = weekMap.get(currentWeekMondayStr) || [];
-  let thisWeekScore = 0;
+  let brizfitScore = 0;
+  let runScore = 0;
   let hasTrtConflict = false;
 
   for (const s of thisWeekSessions) {
@@ -57,21 +71,27 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
     }
     if (s.done) {
       if (s.kind === 'brizfit') {
-        thisWeekScore++;
+        brizfitScore++;
       } else if (s.kind === 'parkrun') {
-        const sDay = parseDateStr(s.date).getDay();
-        if (sDay === 6) { // Saturday
-          thisWeekScore++;
-        }
+        // Saturday parkrun counts towards both Brizfit class replacement AND run goal
+        brizfitScore++;
+        runScore++;
+      } else if (s.kind === 'run') {
+        // Outdoor run on any day of the week
+        runScore++;
       }
     }
   }
 
-  const thisWeekMet = thisWeekScore >= 3;
-  const hasTrtPendingMakeup = hasTrtConflict && thisWeekScore < 3;
+  const brizfitMet = brizfitScore >= brizfitTarget;
+  const runMet = runTarget === 0 || runScore >= runTarget;
+  const thisWeekMet = brizfitMet && runMet;
+  const hasTrtPendingMakeup = hasTrtConflict && !brizfitMet;
 
-  // Now compute consecutive weeks streak going backwards from last completed week
-  // Sort all week keys
+  const thisWeekScore = brizfitScore + (runTarget > 0 ? Math.min(runScore, runTarget) : 0);
+  const thisWeekTarget = brizfitTarget + runTarget;
+
+  // Now compute consecutive weeks streak going backwards
   const sortedWeeks = Array.from(weekMap.keys()).sort();
 
   let streak = 0;
@@ -82,14 +102,22 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
   const weekResults = new Map<string, boolean>();
   for (const wStr of sortedWeeks) {
     const weekSess = weekMap.get(wStr) || [];
-    let score = 0;
+    let bScore = 0;
+    let rScore = 0;
     for (const s of weekSess) {
       if (s.done) {
-        if (s.kind === 'brizfit') score++;
-        else if (s.kind === 'parkrun' && parseDateStr(s.date).getDay() === 6) score++;
+        if (s.kind === 'brizfit') bScore++;
+        else if (s.kind === 'parkrun') {
+          bScore++;
+          rScore++;
+        } else if (s.kind === 'run') {
+          rScore++;
+        }
       }
     }
-    const met = score >= 3;
+
+    // Historical weeks: met if current goals are met, OR legacy standard (bScore >= 3) was met
+    const met = (bScore >= brizfitTarget && (runTarget === 0 || rScore >= runTarget)) || (bScore >= 3);
     weekResults.set(wStr, met);
   }
 
@@ -103,9 +131,7 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
     }
   }
 
-  // Calculate current active streak:
-  // If this week is already met, count backwards starting from this week.
-  // Otherwise, start checking backwards from the previous week.
+  // Calculate current active streak
   const prevWeekMonday = new Date(getWeekStart(today));
   prevWeekMonday.setDate(prevWeekMonday.getDate() - 7);
 
@@ -125,9 +151,15 @@ export function computeStreakStats(sessions: Session[]): StreakStats {
     currentStreak: currentActiveStreak,
     longestStreak: Math.max(maxStreak, currentActiveStreak),
     thisWeekScore,
-    thisWeekTarget: 3,
+    thisWeekTarget,
     thisWeekMet,
-    hasTrtPendingMakeup
+    hasTrtPendingMakeup,
+    brizfitScore,
+    brizfitTarget,
+    brizfitMet,
+    runScore,
+    runTarget,
+    runMet
   };
 }
 

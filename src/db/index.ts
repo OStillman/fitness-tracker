@@ -1,13 +1,19 @@
 import Dexie, { type Table } from 'dexie';
-import type { Session } from '../types';
+import type { Session, UserGoals } from '../types';
+import { DEFAULT_USER_GOALS } from '../types';
 
 export class FitnessDB extends Dexie {
   sessions!: Table<Session, string>;
+  goals!: Table<UserGoals, string>;
 
   constructor() {
     super('FitnessTrackerDB');
     this.version(1).stores({
       sessions: 'id, date, kind, done, updatedAt, syncStatus'
+    });
+    this.version(2).stores({
+      sessions: 'id, date, kind, done, updatedAt, syncStatus',
+      goals: 'id, updatedAt, syncStatus'
     });
   }
 }
@@ -20,6 +26,41 @@ export function formatDate(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// Retrieve user goals from Dexie, fallback to default
+export async function getUserGoals(): Promise<UserGoals> {
+  try {
+    const existing = await db.goals.get('current_goals');
+    if (existing) {
+      return existing;
+    }
+    // Initialize default goals
+    const initial: UserGoals = {
+      ...DEFAULT_USER_GOALS,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    };
+    await db.goals.put(initial);
+    return initial;
+  } catch (err) {
+    console.error('[DB] Failed to load user goals from Dexie:', err);
+    return DEFAULT_USER_GOALS;
+  }
+}
+
+// Save or update user goals in Dexie
+export async function saveUserGoals(updates: Partial<UserGoals>): Promise<UserGoals> {
+  const current = await getUserGoals();
+  const updated: UserGoals = {
+    ...current,
+    ...updates,
+    id: 'current_goals',
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
+  };
+  await db.goals.put(updated);
+  return updated;
 }
 
 // Generate demo data for instant visualization test

@@ -3,7 +3,7 @@ dist
 dist-server
 .env
 .env.local
-data/
+/data/
 *.db
 *.db-journal
 .DS_Store

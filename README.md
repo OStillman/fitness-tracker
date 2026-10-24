@@ -46,6 +46,19 @@ Your tracker will be live at `http://<home-server-ip>:7429` (or whatever `HOST_P
   - `[+ Parkrun]`: Tap 1 reveals Bristol venues (`[Ashton Court]`, `[Eastville]`, `[Blaise Castle]`, `[Pomphrey Hill]`), tap 2 selects and logs!
   - `[+ Quick Ride]`: 1 tap logs preset distances (15km, 25km, 35km, 50km).
   - `[+ Run / Walk]`: 1-tap quick presets (5k run, 10k run, 3km walk, 6km walk).
+- **Custom Weekly Goals (Database Persisted)**:
+  - Configure your weekly class/Brizfit targets and preferred slot days.
+  - Set a flexible weekly run goal (e.g. at least 1 run per week on any day, whether a solo outdoor run or Saturday Parkrun).
+  - All goals are stored in SQLite on the server and synchronized offline-first to client devices.
+- **Evidence-Based Run Suggestions**:
+  - Set a max distance (e.g. 5 km, 10 km) to get curated running workouts dynamically tailored to your distance ceiling.
+  - Workouts are sourced from reputable running authorities:
+    - **Jack Daniels, Ph.D. (*Daniels' Running Formula*)**: E-Pace Easy Aerobic Base, 400m VO₂ Max Track Intervals, 200m Neuromuscular Strides / Sprints, Lactate Threshold Cruise Intervals.
+    - **Hal Higdon (*Hal Higdon's Training Programs*)**: Progressive 75/25 Base Runs, Hill Power Repeats.
+    - **Nike Run Club (Coach Chris Bennett)**: Pyramid Speed Sessions.
+    - **Gösta Holmér**: Classic Swedish Fartlek ("Speed Play").
+    - **UK Athletics (UKA)**: Negative Split Endurance Sessions.
+  - Each workout includes coaching physiology ("Why it works"), heart rate / RPE targets, phase breakdown, and a 1-tap "Log Run" button.
 - **Year Heatmap**: Hand-rolled SVG GitHub-style calendar color-coded by activity (Emerald: Brizfit, Amber: Parkrun, Cyan: Cycle, Rose: Run, Mint: Walk, Purple: TRT).
 - **Parkrun PBs**: Displays your all-time 5K best and course-specific records with celebratory confetti.
 - **Offline First**: All logs are saved instantly to local browser IndexedDB (`Dexie.js`) and synced automatically to SQLite whenever network is available.

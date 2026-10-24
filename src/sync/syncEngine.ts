@@ -55,20 +55,25 @@ export async function syncWithServer(): Promise<void> {
     // Find all pending sessions
     const pendingSessions = await db.sessions.where('syncStatus').equals('pending').toArray();
 
+    // Check for pending goal changes
+    const localGoals = await db.goals.get('current_goals');
+    const goalsToPush = localGoals && localGoals.syncStatus === 'pending' ? localGoals : undefined;
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     };
 
     const lastSyncTime = parseInt(localStorage.getItem('last_sync_timestamp') || '0', 10);
-    console.log(`[SyncEngine] Pushing ${pendingSessions.length} pending session(s) to /api/sync...`);
+    console.log(`[SyncEngine] Pushing ${pendingSessions.length} pending session(s) and ${goalsToPush ? '1 goal update' : '0 goal updates'} to /api/sync...`);
 
     const response = await fetch('/api/sync', {
       method: 'POST',
       headers,
       body: JSON.stringify({
         lastSyncTime,
-        changes: pendingSessions
+        changes: pendingSessions,
+        goals: goalsToPush
       })
     });
 
@@ -92,6 +97,23 @@ export async function syncWithServer(): Promise<void> {
     if (pendingSessions.length > 0) {
       const syncedIds = pendingSessions.map((s) => s.id);
       await db.sessions.where('id').anyOf(syncedIds).modify({ syncStatus: 'synced' });
+    }
+
+    // Mark pushed goals as synced
+    if (goalsToPush) {
+      await db.goals.update('current_goals', { syncStatus: 'synced' });
+    }
+
+    // Merge incoming server goals if present and newer or if local was empty
+    if (data.goals) {
+      const current = await db.goals.get('current_goals');
+      if (!current || data.goals.updatedAt >= (current.updatedAt || 0)) {
+        await db.goals.put({
+          ...data.goals,
+          id: 'current_goals',
+          syncStatus: 'synced'
+        });
+      }
     }
 
     // Merge incoming server sessions into local IndexedDB

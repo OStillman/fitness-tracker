@@ -29,7 +29,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handleExportJSON = async () => {
     const allSessions = await db.sessions.toArray();
-    const blob = new Blob([JSON.stringify(allSessions, null, 2)], { type: 'application/json' });
+    const goals = await db.goals.get('current_goals');
+    const backupData = {
+      version: 2,
+      exportDate: new Date().toISOString(),
+      sessions: allSessions,
+      goals: goals || null
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -45,11 +52,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
     try {
       const text = await file.text();
-      const sessions = JSON.parse(text);
-      if (Array.isArray(sessions)) {
-        await db.sessions.bulkPut(sessions);
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        await db.sessions.bulkPut(parsed);
         onDataChanged();
-        showStatus(`Imported ${sessions.length} sessions!`);
+        showStatus(`Imported ${parsed.length} sessions!`);
+      } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.sessions)) {
+          await db.sessions.bulkPut(parsed.sessions);
+        }
+        if (parsed.goals) {
+          await db.goals.put(parsed.goals);
+        }
+        onDataChanged();
+        showStatus(`Imported ${parsed.sessions?.length || 0} sessions and goals!`);
       } else {
         alert('Invalid backup file format');
       }
