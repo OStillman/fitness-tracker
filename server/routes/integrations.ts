@@ -116,6 +116,24 @@ integrationsRouter.post('/activity/:id/resolve', async (c) => {
         INSERT INTO parkruns (id, session_id, event_name, time_seconds, position, updated_at)
         VALUES (?, ?, ?, ?, NULL, ?)
       `).run(`pr-${sessionId}`, sessionId, 'Parkrun', timeSecs, now);
+
+      if (timeSecs && timeSecs > 0) {
+        const existing5k = db.prepare("SELECT * FROM personal_records WHERE id = 'run_5k'").get() as any;
+        if (!existing5k || !existing5k.value || existing5k.value > timeSecs) {
+          const mins = Math.floor(timeSecs / 60);
+          const secs = timeSecs % 60;
+          db.prepare(`
+            INSERT INTO personal_records (id, user_id, category, title, metric_type, unit, value, display_value, date, notes, updated_at)
+            VALUES ('run_5k', 'default_user', 'run', '5K Run', 'time', 'time', ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              value = excluded.value,
+              display_value = excluded.display_value,
+              date = excluded.date,
+              notes = excluded.notes,
+              updated_at = excluded.updated_at
+          `).run(timeSecs, `${mins}:${secs < 10 ? '0' : ''}${secs}`, activity.start_date, 'Parkrun via Strava', now);
+        }
+      }
     } else if (['cycle', 'run', 'walk'].includes(action)) {
       db.prepare(`
         INSERT INTO activities (id, session_id, kind, distance_km, duration_min, updated_at)
@@ -433,11 +451,31 @@ integrationsRouter.post('/parkrun/sync', async (c) => {
 
   console.log(`[ParkrunSync] Imported ${parsedRuns.length} runs across ${courseMap.size} circuits for A${cleanId}.`);
 
+  const updatedRecords = db.prepare(`
+    SELECT * FROM personal_records
+    WHERE updated_at >= ?
+  `).all(now - 10000) as any[];
+
+  const serverRecords = updatedRecords.map((r) => ({
+    id: r.id,
+    category: r.category,
+    title: r.title,
+    metricType: r.metric_type,
+    unit: r.unit,
+    value: r.value,
+    displayValue: r.display_value,
+    date: r.date,
+    notes: r.notes,
+    updatedAt: r.updated_at,
+    syncStatus: 'synced'
+  }));
+
   return c.json({
     success: true,
     athleteId: `A${cleanId}`,
     importedCount: parsedRuns.length,
     coursesCount: courseMap.size,
+    records: serverRecords,
     courses: Array.from(courseMap.entries()).map(([name, timeSecs]) => ({
       eventName: name,
       bestTimeSeconds: timeSecs

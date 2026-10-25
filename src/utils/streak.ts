@@ -292,6 +292,216 @@ export interface CardioTotals {
   walkKm: number;
 }
 
+export interface ParkrunChallenges {
+  totalRuns: number;
+  currentClub: { name: string; target: number; color: string; bg: string; text: string } | null;
+  nextClub: { name: string; target: number; runsNeeded: number; percent: number; color: string } | null;
+  alphabeteer: {
+    collectedCount: number;
+    totalLetters: number;
+    collectedLetters: string[];
+    percent: number;
+  };
+  stopwatchBingo: {
+    collectedCount: number;
+    totalSeconds: number;
+    collectedSecs: number[];
+    percent: number;
+  };
+  tourist: {
+    uniqueCourses: number;
+    tier: string;
+    nextTarget: number;
+    percent: number;
+  };
+  pirates: {
+    cCount: number;
+    rCount: number;
+    total: number;
+    isCompleted: boolean;
+  };
+  compass: {
+    hasNorth: boolean;
+    hasSouth: boolean;
+    hasEast: boolean;
+    hasWest: boolean;
+    count: number;
+  };
+  speed: {
+    sub20: boolean;
+    sub22: boolean;
+    sub25: boolean;
+    fastestSeconds: number | null;
+  };
+}
+
+export function computeParkrunChallenges(sessions: Session[]): ParkrunChallenges {
+  const parkrunSessions = sessions.filter(
+    (s) => s.kind === 'parkrun' && s.done && s.parkrun?.eventName
+  );
+
+  const totalRuns = parkrunSessions.length;
+
+  // 1. Official Club Milestones
+  const CLUBS = [
+    { target: 25, name: '25 Club', color: 'purple', bg: 'bg-purple-500/20', text: 'text-purple-300' },
+    { target: 50, name: '50 Club', color: 'red', bg: 'bg-red-500/20', text: 'text-red-300' },
+    { target: 100, name: '100 Club', color: 'black', bg: 'bg-slate-800', text: 'text-white' },
+    { target: 250, name: '250 Club', color: 'emerald', bg: 'bg-emerald-500/20', text: 'text-emerald-300' },
+    { target: 500, name: '500 Club', color: 'blue', bg: 'bg-blue-500/20', text: 'text-blue-300' }
+  ];
+
+  let currentClub: ParkrunChallenges['currentClub'] = null;
+  for (const c of CLUBS) {
+    if (totalRuns >= c.target) {
+      currentClub = c;
+    }
+  }
+
+  let nextClub: ParkrunChallenges['nextClub'] = null;
+  const upcoming = CLUBS.find((c) => totalRuns < c.target);
+  if (upcoming) {
+    const prevTarget = currentClub ? currentClub.target : 0;
+    const needed = upcoming.target - totalRuns;
+    const range = upcoming.target - prevTarget;
+    const progress = totalRuns - prevTarget;
+    const percent = Math.min(100, Math.max(0, Math.round((progress / range) * 100)));
+    nextClub = {
+      name: upcoming.name,
+      target: upcoming.target,
+      runsNeeded: needed,
+      percent,
+      color: upcoming.color
+    };
+  }
+
+  // 2. Alphabeteer Challenge: A-Z (excluding X = 25 letters)
+  const lettersSet = new Set<string>();
+  const secondsSet = new Set<number>();
+  const coursesMap = new Map<string, number>();
+
+  let hasNorth = false;
+  let hasSouth = false;
+  let hasEast = false;
+  let hasWest = false;
+  let cCount = 0;
+  let rCount = 0;
+  let fastestSecs: number | null = null;
+
+  for (const s of parkrunSessions) {
+    const rawName = s.parkrun!.eventName.trim();
+    const cleanName = rawName.replace(/^the\s+/i, '').trim();
+
+    if (cleanName.length > 0) {
+      const firstChar = cleanName[0].toUpperCase();
+      if (firstChar >= 'A' && firstChar <= 'Z' && firstChar !== 'X') {
+        lettersSet.add(firstChar);
+      }
+
+      if (firstChar === 'C') cCount++;
+      if (firstChar === 'R') rCount++;
+
+      // Compass check
+      if (/\bnorth\b/i.test(rawName)) hasNorth = true;
+      if (/\bsouth\b/i.test(rawName)) hasSouth = true;
+      if (/\beast\b|eastville/i.test(rawName)) hasEast = true;
+      if (/\bwest\b/i.test(rawName)) hasWest = true;
+
+      // Unique courses
+      coursesMap.set(rawName.toLowerCase(), (coursesMap.get(rawName.toLowerCase()) || 0) + 1);
+    }
+
+    if (s.parkrun?.timeSeconds && s.parkrun.timeSeconds > 0) {
+      const secs = s.parkrun.timeSeconds % 60;
+      secondsSet.add(secs);
+
+      if (fastestSecs === null || s.parkrun.timeSeconds < fastestSecs) {
+        fastestSecs = s.parkrun.timeSeconds;
+      }
+    }
+  }
+
+  const alphabeteerCount = lettersSet.size;
+  const alphabeteerPercent = Math.round((alphabeteerCount / 25) * 100);
+
+  const bingoCount = secondsSet.size;
+  const bingoPercent = Math.round((bingoCount / 60) * 100);
+
+  // Tourist Tiers
+  const uniqueCourses = coursesMap.size;
+  let touristTier = 'Local Parkrunner';
+  let nextTouristTarget = 10;
+  let prevTouristTarget = 0;
+
+  if (uniqueCourses >= 100) {
+    touristTier = 'Cowell Club (100+)';
+    nextTouristTarget = 250;
+    prevTouristTarget = 100;
+  } else if (uniqueCourses >= 50) {
+    touristTier = 'Half-Cowell (50+)';
+    nextTouristTarget = 100;
+    prevTouristTarget = 50;
+  } else if (uniqueCourses >= 20) {
+    touristTier = 'Bronze Tourist (20+)';
+    nextTouristTarget = 50;
+    prevTouristTarget = 20;
+  } else if (uniqueCourses >= 10) {
+    touristTier = 'Freeway Tourist (10+)';
+    nextTouristTarget = 20;
+    prevTouristTarget = 10;
+  }
+
+  const touristPercent = Math.min(
+    100,
+    Math.round(((uniqueCourses - prevTouristTarget) / (nextTouristTarget - prevTouristTarget)) * 100)
+  );
+
+  const compassCount = (hasNorth ? 1 : 0) + (hasSouth ? 1 : 0) + (hasEast ? 1 : 0) + (hasWest ? 1 : 0);
+
+  return {
+    totalRuns,
+    currentClub,
+    nextClub,
+    alphabeteer: {
+      collectedCount: alphabeteerCount,
+      totalLetters: 25,
+      collectedLetters: Array.from(lettersSet).sort(),
+      percent: alphabeteerPercent
+    },
+    stopwatchBingo: {
+      collectedCount: bingoCount,
+      totalSeconds: 60,
+      collectedSecs: Array.from(secondsSet).sort((a, b) => a - b),
+      percent: bingoPercent
+    },
+    tourist: {
+      uniqueCourses,
+      tier: touristTier,
+      nextTarget: nextTouristTarget,
+      percent: touristPercent
+    },
+    pirates: {
+      cCount: Math.min(7, cCount),
+      rCount: Math.min(1, rCount),
+      total: Math.min(7, cCount) + Math.min(1, rCount),
+      isCompleted: cCount >= 7 && rCount >= 1
+    },
+    compass: {
+      hasNorth,
+      hasSouth,
+      hasEast,
+      hasWest,
+      count: compassCount
+    },
+    speed: {
+      sub20: fastestSecs !== null && fastestSecs < 1200,
+      sub22: fastestSecs !== null && fastestSecs < 1320,
+      sub25: fastestSecs !== null && fastestSecs < 1500,
+      fastestSeconds: fastestSecs
+    }
+  };
+}
+
 export function getMonthlyCardioTotals(sessions: Session[]): CardioTotals {
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

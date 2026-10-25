@@ -20,11 +20,15 @@ import {
   Globe,
   RefreshCw,
   Loader2,
-  Search
+  Search,
+  Target,
+  Shield,
+  Anchor,
+  Compass
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PersonalRecord, RecordCategory, RecordMetricType, Session } from '../types';
-import { getParkrunPBs, formatTimeMMSS } from '../utils/streak';
+import { getParkrunPBs, formatTimeMMSS, computeParkrunChallenges } from '../utils/streak';
 
 interface TrophyCabinetModalProps {
   isOpen: boolean;
@@ -34,7 +38,7 @@ interface TrophyCabinetModalProps {
   sessions?: Session[];
   storedAthleteId?: string;
   onSaveParkrunPB?: (eventName: string, timeSeconds: number, date?: string, position?: number) => Promise<void>;
-  onSyncParkrunWebsite?: (athleteId: string) => Promise<{ importedCount: number; coursesCount: number }>;
+  onSyncParkrunWebsite?: (athleteId: string) => Promise<{ importedCount: number; coursesCount: number; records?: PersonalRecord[] }>;
 }
 
 const BRISTOL_PARKRUNS = ['Ashton Court', 'Eastville', 'Blaise Castle', 'Pomphrey Hill', 'Windmill Hill'];
@@ -58,8 +62,10 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
 
-  // Course PBs state
+  // Course PBs & Challenges state
   const { overallPB, coursePBs, lastParkrun, totalRunsCount } = getParkrunPBs(sessions);
+  const parkrunChallenges = computeParkrunChallenges(sessions);
+  const [showAlphabeteerDetails, setShowAlphabeteerDetails] = useState(false);
   const [courseSearch, setCourseSearch] = useState('');
   const [isAddCourseModalOpen, setIsAddCourseModalOpen] = useState(false);
   const [courseVenue, setCourseVenue] = useState('Ashton Court');
@@ -327,7 +333,7 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
                         <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                       </h4>
                       <p className="text-[10px] text-slate-400">
-                        Pulls your official finish position, age grade %, courses & 5K PB
+                        Auto-updates finish position, age grade %, course count & 5K PB
                       </p>
                     </div>
                   </div>
@@ -542,6 +548,207 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
               );
             })}
           </div>
+
+          {/* ========================================================================= */}
+          {/* OFFICIAL & UNOFFICIAL PARKRUN CHALLENGES HUB                              */}
+          {/* ========================================================================= */}
+          {activeCategory === 'parkrun' && (
+            <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-slate-300 flex items-center gap-1.5">
+                    <Target className="w-4 h-4 text-emerald-400" />
+                    <span>Milestone Clubs & Challenges</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500">
+                    Official club progress & iconic parkrun challenges
+                  </p>
+                </div>
+                <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {parkrunChallenges.totalRuns} total runs
+                </span>
+              </div>
+
+              {/* 1. Official Club Progress */}
+              {parkrunChallenges.nextClub && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 shadow-md">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-white">
+                        Official Milestone: {parkrunChallenges.nextClub.name}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-amber-400">
+                      {parkrunChallenges.totalRuns} / {parkrunChallenges.nextClub.target} runs
+                    </span>
+                  </div>
+                  {/* Progress Bar */}
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1">
+                    <div
+                      className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${parkrunChallenges.nextClub.percent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>
+                      {parkrunChallenges.currentClub
+                        ? `${parkrunChallenges.currentClub.name} achieved`
+                        : 'On your way!'}
+                    </span>
+                    <span>{parkrunChallenges.nextClub.runsNeeded} runs to next club</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Challenges Grid: Alphabeteer, Bingo, Tourist, Pirates, Compass, Pace */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Alphabeteer */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white">Alphabeteer</span>
+                    <span className="text-[11px] font-bold text-emerald-400 font-mono">
+                      {parkrunChallenges.alphabeteer.collectedCount} / 25
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1.5">
+                    <div
+                      className="bg-emerald-400 h-full rounded-full"
+                      style={{ width: `${parkrunChallenges.alphabeteer.percent}%` }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAlphabeteerDetails(!showAlphabeteerDetails)}
+                    className="text-[10px] font-semibold text-slate-400 hover:text-emerald-300 flex items-center gap-1 transition"
+                  >
+                    <span>{showAlphabeteerDetails ? 'Hide letter grid' : 'View letter grid (A-Z)'}</span>
+                    <ChevronRight className={`w-3 h-3 transition-transform ${showAlphabeteerDetails ? 'rotate-90' : ''}`} />
+                  </button>
+
+                  {showAlphabeteerDetails && (
+                    <div className="mt-2 pt-2 border-t border-slate-800 grid grid-cols-7 gap-1 text-[9px] font-mono text-center">
+                      {'ABCDEFGHIJKLMNOPQRSTUVWYZ'.split('').map((letter) => {
+                        const hasLetter = parkrunChallenges.alphabeteer.collectedLetters.includes(letter);
+                        return (
+                          <span
+                            key={letter}
+                            className={`py-0.5 rounded ${
+                              hasLetter ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-900 text-slate-600'
+                            }`}
+                          >
+                            {letter}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Stopwatch Bingo */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white">Stopwatch Bingo</span>
+                    <span className="text-[11px] font-bold text-cyan-400 font-mono">
+                      {parkrunChallenges.stopwatchBingo.collectedCount} / 60
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1.5">
+                    <div
+                      className="bg-cyan-400 h-full rounded-full"
+                      style={{ width: `${parkrunChallenges.stopwatchBingo.percent}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Collected {parkrunChallenges.stopwatchBingo.collectedCount} of 60 seconds (:00-:59)
+                  </p>
+                </div>
+
+                {/* Tourist Status */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white">Tourist Level</span>
+                    <span className="text-[11px] font-bold text-amber-400 font-mono">
+                      {parkrunChallenges.tourist.uniqueCourses} courses
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1.5">
+                    <div
+                      className="bg-amber-400 h-full rounded-full"
+                      style={{ width: `${parkrunChallenges.tourist.percent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span className="font-semibold text-amber-300">{parkrunChallenges.tourist.tier}</span>
+                    <span>Target: {parkrunChallenges.tourist.nextTarget} venues</span>
+                  </div>
+                </div>
+
+                {/* Pirates Challenge */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1">
+                      <Anchor className="w-3 h-3 text-cyan-400" />
+                      <span>Pirates Challenge</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-cyan-400 font-mono">
+                      {parkrunChallenges.pirates.total} / 8
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-400">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                      {parkrunChallenges.pirates.cCount}/7 'C's
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                      {parkrunChallenges.pirates.rCount}/1 'R'
+                    </span>
+                    {parkrunChallenges.pirates.isCompleted && (
+                      <span className="text-emerald-400 font-bold">Ahoy! 🏴‍☠️</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Compass Club */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1">
+                      <Compass className="w-3 h-3 text-purple-400" />
+                      <span>Compass Club</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-400 font-mono">
+                      {parkrunChallenges.compass.count} / 4
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1 mt-1 text-[9px] font-bold text-center">
+                    <span className={`py-0.5 rounded ${parkrunChallenges.compass.hasNorth ? 'bg-purple-500/30 text-purple-200 border border-purple-500/40' : 'bg-slate-900 text-slate-600'}`}>North</span>
+                    <span className={`py-0.5 rounded ${parkrunChallenges.compass.hasSouth ? 'bg-purple-500/30 text-purple-200 border border-purple-500/40' : 'bg-slate-900 text-slate-600'}`}>South</span>
+                    <span className={`py-0.5 rounded ${parkrunChallenges.compass.hasEast ? 'bg-purple-500/30 text-purple-200 border border-purple-500/40' : 'bg-slate-900 text-slate-600'}`}>East</span>
+                    <span className={`py-0.5 rounded ${parkrunChallenges.compass.hasWest ? 'bg-purple-500/30 text-purple-200 border border-purple-500/40' : 'bg-slate-900 text-slate-600'}`}>West</span>
+                  </div>
+                </div>
+
+                {/* Speed Barriers */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1">
+                      <Zap className="w-3 h-3 text-rose-400" />
+                      <span>Speed Barriers</span>
+                    </span>
+                    {parkrunChallenges.speed.fastestSeconds && (
+                      <span className="text-[11px] font-bold text-rose-300 font-mono">
+                        {formatTimeMMSS(parkrunChallenges.speed.fastestSeconds)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 mt-1 text-[9px] font-bold text-center">
+                    <span className={`py-0.5 rounded ${parkrunChallenges.speed.sub25 ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40' : 'bg-slate-900 text-slate-600'}`}>Sub-25</span>
+                    <span className={`py-0.5 rounded ${parkrunChallenges.speed.sub22 ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/40' : 'bg-slate-900 text-slate-600'}`}>Sub-22</span>
+                    <span className={`py-0.5 rounded ${parkrunChallenges.speed.sub20 ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40' : 'bg-slate-900 text-slate-600'}`}>Sub-20</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ========================================================================= */}
           {/* COURSE PERSONAL BESTS SECTION (Only in Parkrun tab)                        */}

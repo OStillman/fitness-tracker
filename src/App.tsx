@@ -613,13 +613,18 @@ export const App: React.FC = () => {
       updatedAt: Date.now()
     });
 
+    if (Array.isArray(data.records) && data.records.length > 0) {
+      await db.records.bulkPut(data.records);
+    }
+
     // Pull the newly created sessions into local Dexie
     localStorage.setItem('last_sync_timestamp', '0');
     await syncWithServer();
 
     return {
       importedCount: data.importedCount,
-      coursesCount: data.coursesCount
+      coursesCount: data.coursesCount,
+      records: data.records
     };
   };
 
