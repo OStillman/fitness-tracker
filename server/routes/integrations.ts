@@ -139,7 +139,13 @@ integrationsRouter.post('/activity/:id/resolve', async (c) => {
 
 // 4. Official Parkrun Website Sync Endpoint
 function parseParkrunResultsHtml(html: string) {
-  const results: { date: string; eventName: string; position?: number; timeSeconds: number }[] = [];
+  const results: {
+    date: string;
+    eventName: string;
+    position?: number;
+    timeSeconds: number;
+    ageGrade?: number;
+  }[] = [];
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let trMatch;
 
