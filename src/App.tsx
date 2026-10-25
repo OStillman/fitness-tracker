@@ -26,7 +26,7 @@ import { saveUserGoals, getPersonalRecords, savePersonalRecord } from './db';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
 import type { ActivityKind, Session, SwapReason, PendingActivity, UserGoals, SuggestedRunWorkout, PersonalRecord } from './types';
-import { DEFAULT_USER_GOALS } from './types';
+import { DEFAULT_USER_GOALS, DEFAULT_PERSONAL_RECORDS } from './types';
 
 export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('idle');
@@ -43,8 +43,28 @@ export const App: React.FC = () => {
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
   const storedGoals = useLiveQuery(() => db.goals.get('current_goals'), []);
   const userGoals: UserGoals = storedGoals || DEFAULT_USER_GOALS;
-  const storedRecords = useLiveQuery(() => getPersonalRecords(), []);
-  const personalRecords: PersonalRecord[] = storedRecords || [];
+  const rawRecords = useLiveQuery(() => db.records.toArray(), []) || [];
+
+  const personalRecords = React.useMemo(() => {
+    const existingMap = new Map(rawRecords.map((r) => [r.id, r]));
+    const combined: PersonalRecord[] = DEFAULT_PERSONAL_RECORDS.map((def) => {
+      if (existingMap.has(def.id)) {
+        return existingMap.get(def.id)!;
+      }
+      return {
+        ...def,
+        updatedAt: 0
+      };
+    });
+
+    for (const rec of rawRecords) {
+      if (!DEFAULT_PERSONAL_RECORDS.some((d) => d.id === rec.id)) {
+        combined.push(rec);
+      }
+    }
+
+    return combined;
+  }, [rawRecords]);
 
   // Listen for browser PWA install event
   useEffect(() => {
@@ -507,6 +527,58 @@ export const App: React.FC = () => {
 
     if (!prevPBs.overallPB || timeSeconds < prevPBs.overallPB.bestTimeSeconds) {
       triggerPBConfetti();
+      const mins = Math.floor(timeSeconds / 60);
+      const secs = timeSeconds % 60;
+      await savePersonalRecord({
+        id: 'run_5k',
+        category: 'run',
+        title: '5K Run',
+        metricType: 'time',
+        unit: 'time',
+        value: timeSeconds,
+        displayValue: `${mins}:${secs < 10 ? '0' : ''}${secs}`,
+        date: targetDate === '2020-01-01' ? undefined : targetDate,
+        notes: `${eventName} Parkrun`,
+        updatedAt: now,
+        syncStatus: 'pending'
+      });
+    }
+
+    // Update Different Courses Run count
+    const coursesSet = new Set(prevPBs.coursePBs.map((c) => c.eventName.toLowerCase()));
+    coursesSet.add(eventName.toLowerCase());
+    await savePersonalRecord({
+      id: 'parkrun_courses_count',
+      category: 'parkrun',
+      title: 'Different Courses Run',
+      metricType: 'number',
+      unit: 'courses',
+      value: coursesSet.size,
+      displayValue: `${coursesSet.size} courses`,
+      notes: 'Parkrun courses tracked',
+      updatedAt: now,
+      syncStatus: 'pending'
+    });
+
+    // Update Best Position if provided
+    if (position && position > 0) {
+      const existingPos = await db.records.get('parkrun_best_pos');
+      if (!existingPos || !existingPos.value || position < existingPos.value) {
+        const sfx = (position % 100 > 10 && position % 100 < 20) ? 'th' : ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'][position % 10];
+        await savePersonalRecord({
+          id: 'parkrun_best_pos',
+          category: 'parkrun',
+          title: 'Best Finish Position',
+          metricType: 'number',
+          unit: 'position',
+          value: position,
+          displayValue: `${position}${sfx}`,
+          date: targetDate === '2020-01-01' ? undefined : targetDate,
+          notes: eventName,
+          updatedAt: now,
+          syncStatus: 'pending'
+        });
+      }
     }
 
     syncWithServer();

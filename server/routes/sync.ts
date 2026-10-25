@@ -116,6 +116,7 @@ syncRouter.post('/', async (c) => {
     INSERT INTO personal_records (id, user_id, category, title, metric_type, unit, value, display_value, date, notes, updated_at)
     VALUES (@id, @user_id, @category, @title, @metric_type, @unit, @value, @display_value, @date, @notes, @updated_at)
     ON CONFLICT(id) DO UPDATE SET
+      user_id = excluded.user_id,
       category = excluded.category,
       title = excluded.title,
       metric_type = excluded.metric_type,
@@ -125,7 +126,6 @@ syncRouter.post('/', async (c) => {
       date = excluded.date,
       notes = excluded.notes,
       updated_at = excluded.updated_at
-    WHERE excluded.updated_at >= personal_records.updated_at
   `);
 
   const syncTx = db.transaction(() => {
@@ -177,7 +177,7 @@ syncRouter.post('/', async (c) => {
         display_value: rec.displayValue ?? null,
         date: rec.date ?? null,
         notes: rec.notes ?? null,
-        updated_at: rec.updatedAt || now
+        updated_at: now
       });
     }
 
@@ -246,7 +246,7 @@ syncRouter.post('/', async (c) => {
   // Fetch updated personal records
   const updatedRecords = db.prepare(`
     SELECT * FROM personal_records
-    WHERE updated_at > ?
+    WHERE updated_at >= ?
   `).all(lastSyncTime) as any[];
 
   const serverRecords = updatedRecords.map((r) => ({

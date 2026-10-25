@@ -113,7 +113,7 @@ export async function syncWithServer(): Promise<void> {
     if (data.serverRecords && data.serverRecords.length > 0) {
       for (const r of data.serverRecords) {
         const local = await db.records.get(r.id);
-        if (!local || local.updatedAt < r.updatedAt) {
+        if (!local || (local.updatedAt || 0) <= r.updatedAt) {
           await db.records.put({ ...r, syncStatus: 'synced' });
         }
       }
