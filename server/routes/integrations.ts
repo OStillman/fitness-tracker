@@ -206,12 +206,22 @@ function parseParkrunResultsHtml(html: string) {
 
           const position = parseInt(rawPos, 10);
 
+          let ageGrade: number | undefined = undefined;
+          if (tdMatches.length >= 6) {
+            const ageMatch = tdMatches[5]?.replace('%', '').trim();
+            const parsedAge = parseFloat(ageMatch);
+            if (!isNaN(parsedAge) && parsedAge > 0 && parsedAge <= 100) {
+              ageGrade = Math.round(parsedAge * 100) / 100;
+            }
+          }
+
           if (timeSeconds > 0) {
             results.push({
               date: dateIso,
               eventName,
               position: !isNaN(position) ? position : undefined,
-              timeSeconds
+              timeSeconds,
+              ageGrade
             });
           }
         }
@@ -309,6 +319,96 @@ integrationsRouter.post('/parkrun/sync', async (c) => {
       const currentCourseBest = courseMap.get(r.eventName);
       if (!currentCourseBest || r.timeSeconds < currentCourseBest) {
         courseMap.set(r.eventName, r.timeSeconds);
+      }
+    }
+
+    // Upsert official records into personal_records table
+    const upsertPR = db.prepare(`
+      INSERT INTO personal_records (id, user_id, category, title, metric_type, unit, value, display_value, date, notes, updated_at)
+      VALUES (@id, 'default_user', @category, @title, @metric_type, @unit, @value, @display_value, @date, @notes, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        value = excluded.value,
+        display_value = excluded.display_value,
+        date = excluded.date,
+        notes = excluded.notes,
+        updated_at = excluded.updated_at
+    `);
+
+    // 1. Best Finish Position
+    const validPositions = parsedRuns.filter((r) => r.position && r.position > 0);
+    validPositions.sort((a, b) => (a.position || 999999) - (b.position || 999999));
+    const bestPosRun = validPositions[0];
+    if (bestPosRun && bestPosRun.position) {
+      const p = bestPosRun.position;
+      const sfx = (p % 100 > 10 && p % 100 < 20) ? 'th' : ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'][p % 10];
+      upsertPR.run({
+        id: 'parkrun_best_pos',
+        category: 'parkrun',
+        title: 'Best Finish Position',
+        metric_type: 'number',
+        unit: 'position',
+        value: p,
+        display_value: `${p}${sfx}`,
+        date: bestPosRun.date,
+        notes: bestPosRun.eventName,
+        updated_at: now
+      });
+    }
+
+    // 2. Highest Age Grade %
+    const validAgeGrades = parsedRuns.filter((r) => r.ageGrade && r.ageGrade > 0);
+    validAgeGrades.sort((a, b) => (b.ageGrade || 0) - (a.ageGrade || 0));
+    const bestAgeRun = validAgeGrades[0];
+    if (bestAgeRun && bestAgeRun.ageGrade) {
+      upsertPR.run({
+        id: 'parkrun_age_grade',
+        category: 'parkrun',
+        title: 'Highest Age Grade',
+        metric_type: 'percentage',
+        unit: '%',
+        value: bestAgeRun.ageGrade,
+        display_value: `${bestAgeRun.ageGrade}%`,
+        date: bestAgeRun.date,
+        notes: bestAgeRun.eventName,
+        updated_at: now
+      });
+    }
+
+    // 3. Different Courses Run
+    upsertPR.run({
+      id: 'parkrun_courses_count',
+      category: 'parkrun',
+      title: 'Different Courses Run',
+      metric_type: 'number',
+      unit: 'courses',
+      value: courseMap.size,
+      display_value: `${courseMap.size} courses`,
+      date: undefined,
+      notes: `${parsedRuns.length} total parkruns`,
+      updated_at: now
+    });
+
+    // 4. Overall 5K PB
+    const validTimes = [...parsedRuns].sort((a, b) => a.timeSeconds - b.timeSeconds);
+    const best5kRun = validTimes[0];
+    if (best5kRun) {
+      const mins = Math.floor(best5kRun.timeSeconds / 60);
+      const secs = best5kRun.timeSeconds % 60;
+      const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      const existing5k = db.prepare("SELECT * FROM personal_records WHERE id = 'run_5k'").get() as any;
+      if (!existing5k || !existing5k.value || existing5k.value > best5kRun.timeSeconds) {
+        upsertPR.run({
+          id: 'run_5k',
+          category: 'run',
+          title: '5K Run',
+          metric_type: 'time',
+          unit: 'time',
+          value: best5kRun.timeSeconds,
+          display_value: timeStr,
+          date: best5kRun.date,
+          notes: `${best5kRun.eventName} Parkrun`,
+          updated_at: now
+        });
       }
     }
 

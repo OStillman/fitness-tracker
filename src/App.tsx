@@ -746,6 +746,8 @@ export const App: React.FC = () => {
         onClose={() => setIsTrophyCabinetOpen(false)}
         records={personalRecords}
         onSaveRecord={handleSavePersonalRecord}
+        storedAthleteId={userGoals.parkrunAthleteId}
+        onSyncParkrunWebsite={handleSyncParkrunWebsite}
       />
     </div>
   );

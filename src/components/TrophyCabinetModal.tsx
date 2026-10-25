@@ -16,7 +16,10 @@ import {
   TrendingUp,
   Clock,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Globe,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { PersonalRecord, RecordCategory, RecordMetricType } from '../types';
@@ -26,16 +29,26 @@ interface TrophyCabinetModalProps {
   onClose: () => void;
   records: PersonalRecord[];
   onSaveRecord: (record: PersonalRecord) => Promise<void>;
+  storedAthleteId?: string;
+  onSyncParkrunWebsite?: (athleteId: string) => Promise<{ importedCount: number; coursesCount: number }>;
 }
 
 export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
   isOpen,
   onClose,
   records,
-  onSaveRecord
+  onSaveRecord,
+  storedAthleteId = '',
+  onSyncParkrunWebsite
 }) => {
   const [activeCategory, setActiveCategory] = useState<RecordCategory>('run');
   const [editingRecord, setEditingRecord] = useState<PersonalRecord | null>(null);
+
+  // Sync state for Parkrun tab
+  const [athleteIdInput, setAthleteIdInput] = useState(storedAthleteId);
+  const [isSyncingParkrun, setIsSyncingParkrun] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
 
   // Form states for the record being edited
   const [timeMins, setTimeMins] = useState('');
@@ -243,6 +256,85 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
 
         {/* Record Cards List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+          {/* Parkrun Website Sync Card */}
+          {activeCategory === 'parkrun' && onSyncParkrunWebsite && (
+            <div className="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 mb-3 shadow-md">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>Sync from Parkrun Website</span>
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    Pulls your official finish position, age grade %, courses & 5K PB
+                  </p>
+                </div>
+              </div>
+
+              {/* Input row */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Athlete # (e.g. A1924105)"
+                  value={athleteIdInput}
+                  onChange={(e) => {
+                    setAthleteIdInput(e.target.value);
+                    setSyncError(null);
+                    setSyncSuccess(null);
+                  }}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:border-emerald-400"
+                />
+                <button
+                  type="button"
+                  disabled={isSyncingParkrun || !athleteIdInput.trim()}
+                  onClick={async () => {
+                    setIsSyncingParkrun(true);
+                    setSyncError(null);
+                    setSyncSuccess(null);
+                    try {
+                      const res = await onSyncParkrunWebsite(athleteIdInput.trim());
+                      setSyncSuccess(`Synced! Imported ${res.importedCount} parkruns across ${res.coursesCount} courses.`);
+                      confetti({ particleCount: 75, spread: 60, origin: { y: 0.6 } });
+                    } catch (err: any) {
+                      setSyncError(err.message || 'Failed to sync with parkrun.org.uk');
+                    } finally {
+                      setIsSyncingParkrun(false);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 active-press transition shrink-0"
+                >
+                  {isSyncingParkrun ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Syncing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Sync Website</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {syncSuccess && (
+                <div className="mt-2 text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{syncSuccess}</span>
+                </div>
+              )}
+              {syncError && (
+                <div className="mt-2 text-[11px] font-semibold text-rose-400 flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" />
+                  <span>{syncError}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {categoryRecords.map((rec) => {
             const hasValue = rec.value != null && rec.value > 0;
 
