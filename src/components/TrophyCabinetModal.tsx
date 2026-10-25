@@ -19,26 +19,34 @@ import {
   ChevronRight,
   Globe,
   RefreshCw,
-  Loader2
+  Loader2,
+  Search
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { PersonalRecord, RecordCategory, RecordMetricType } from '../types';
+import type { PersonalRecord, RecordCategory, RecordMetricType, Session } from '../types';
+import { getParkrunPBs, formatTimeMMSS } from '../utils/streak';
 
 interface TrophyCabinetModalProps {
   isOpen: boolean;
   onClose: () => void;
   records: PersonalRecord[];
   onSaveRecord: (record: PersonalRecord) => Promise<void>;
+  sessions?: Session[];
   storedAthleteId?: string;
+  onSaveParkrunPB?: (eventName: string, timeSeconds: number, date?: string, position?: number) => Promise<void>;
   onSyncParkrunWebsite?: (athleteId: string) => Promise<{ importedCount: number; coursesCount: number }>;
 }
+
+const BRISTOL_PARKRUNS = ['Ashton Court', 'Eastville', 'Blaise Castle', 'Pomphrey Hill', 'Windmill Hill'];
 
 export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
   isOpen,
   onClose,
   records,
   onSaveRecord,
+  sessions = [],
   storedAthleteId = '',
+  onSaveParkrunPB,
   onSyncParkrunWebsite
 }) => {
   const [activeCategory, setActiveCategory] = useState<RecordCategory>('run');
@@ -49,6 +57,17 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
   const [isSyncingParkrun, setIsSyncingParkrun] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
+
+  // Course PBs state
+  const { overallPB, coursePBs, lastParkrun, totalRunsCount } = getParkrunPBs(sessions);
+  const [courseSearch, setCourseSearch] = useState('');
+  const [isAddCourseModalOpen, setIsAddCourseModalOpen] = useState(false);
+  const [courseVenue, setCourseVenue] = useState('Ashton Court');
+  const [customCourseVenue, setCustomCourseVenue] = useState('');
+  const [courseTimeInput, setCourseTimeInput] = useState('');
+  const [courseDateInput, setCourseDateInput] = useState('');
+  const [coursePositionInput, setCoursePositionInput] = useState('');
+  const [courseFormError, setCourseFormError] = useState<string | null>(null);
 
   // Form states for the record being edited
   const [timeMins, setTimeMins] = useState('');
@@ -66,17 +85,22 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
   // Filter records by current category
   const categoryRecords = records.filter((r) => r.category === activeCategory);
 
-  const getCategoryIcon = (cat: RecordCategory) => {
-    switch (cat) {
-      case 'run':
-        return <Footprints className="w-4 h-4 text-rose-400" />;
-      case 'cycle':
-        return <Bike className="w-4 h-4 text-cyan-400" />;
-      case 'parkrun':
-        return <Trees className="w-4 h-4 text-emerald-400" />;
-      case 'streak':
-        return <Flame className="w-4 h-4 text-amber-400" />;
+  const filteredCourses = coursePBs.filter((c) =>
+    c.eventName.toLowerCase().includes(courseSearch.toLowerCase().trim())
+  );
+
+  const parseMmSs = (val: string): number | null => {
+    if (!val) return null;
+    const parts = val.trim().split(':');
+    if (parts.length === 2) {
+      const m = parseInt(parts[0], 10);
+      const s = parseInt(parts[1], 10);
+      if (!isNaN(m) && !isNaN(s) && m >= 0 && s >= 0 && s < 60) {
+        return m * 60 + s;
+      }
     }
+    const num = parseInt(val, 10);
+    return !isNaN(num) && num > 0 ? num * 60 : null;
   };
 
   const openEditModal = (rec: PersonalRecord) => {
@@ -177,6 +201,35 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
     openEditModal(newRecord);
   };
 
+  const handleSaveCoursePB = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const venue = courseVenue === 'custom' ? customCourseVenue.trim() : courseVenue;
+    if (!venue) {
+      setCourseFormError('Please enter a course name');
+      return;
+    }
+
+    const timeSeconds = parseMmSs(courseTimeInput);
+    if (!timeSeconds || timeSeconds <= 0) {
+      setCourseFormError('Please enter a valid time (e.g. 21:30)');
+      return;
+    }
+
+    const pos = coursePositionInput ? parseInt(coursePositionInput, 10) : undefined;
+    const finalDate = courseDateInput.trim() || '2020-01-01';
+
+    if (onSaveParkrunPB) {
+      await onSaveParkrunPB(venue, timeSeconds, finalDate, pos);
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.55 } });
+    }
+
+    setIsAddCourseModalOpen(false);
+    setCourseTimeInput('');
+    setCourseDateInput('');
+    setCoursePositionInput('');
+    setCourseFormError(null);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -188,11 +241,11 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-white flex items-center gap-1.5">
-                Personal Records
+                Personal Records & Trophies
                 <Sparkles className="w-4 h-4 text-amber-400" />
               </h3>
               <p className="text-xs text-slate-400">
-                Your personal bests & milestone trophies
+                Running, Cycling, Parkrun & Streak Milestones
               </p>
             </div>
           </div>
@@ -255,156 +308,357 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
         </div>
 
         {/* Record Cards List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-          {/* Parkrun Website Sync Card */}
-          {activeCategory === 'parkrun' && onSyncParkrunWebsite && (
-            <div className="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 mb-3 shadow-md">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Globe className="w-4 h-4" />
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* ========================================================================= */}
+          {/* SPECIAL PARKRUN SECTION: Website Sync, Overall 5K PB, Last Parkrun & Courses */}
+          {/* ========================================================================= */}
+          {activeCategory === 'parkrun' && (
+            <>
+              {/* Parkrun Website Sync Card */}
+              {onSyncParkrunWebsite && (
+                <div className="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 shadow-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>Sync from Parkrun Website</span>
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Pulls your official finish position, age grade %, courses & 5K PB
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Input row */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Athlete # (e.g. A1924105)"
+                      value={athleteIdInput}
+                      onChange={(e) => {
+                        setAthleteIdInput(e.target.value);
+                        setSyncError(null);
+                        setSyncSuccess(null);
+                      }}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:border-emerald-400"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSyncingParkrun || !athleteIdInput.trim()}
+                      onClick={async () => {
+                        setIsSyncingParkrun(true);
+                        setSyncError(null);
+                        setSyncSuccess(null);
+                        try {
+                          const res = await onSyncParkrunWebsite(athleteIdInput.trim());
+                          setSyncSuccess(`Synced! Imported ${res.importedCount} parkruns across ${res.coursesCount} courses.`);
+                          confetti({ particleCount: 75, spread: 60, origin: { y: 0.6 } });
+                        } catch (err: any) {
+                          setSyncError(err.message || 'Failed to sync with parkrun.org.uk');
+                        } finally {
+                          setIsSyncingParkrun(false);
+                        }
+                      }}
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 active-press transition shrink-0"
+                    >
+                      {isSyncingParkrun ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Syncing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Sync Website</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {syncSuccess && (
+                    <div className="mt-2 text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{syncSuccess}</span>
+                    </div>
+                  )}
+                  {syncError && (
+                    <div className="mt-2 text-[11px] font-semibold text-rose-400 flex items-center gap-1">
+                      <X className="w-3.5 h-3.5" />
+                      <span>{syncError}</span>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* All-Time 5K Personal Best Card */}
+              {overallPB && (
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-slate-900 border border-amber-500/40 p-4 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Trophy className="w-4 h-4 text-amber-400 fill-amber-400" />
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
+                          All-Time 5K Personal Best
+                        </span>
+                      </div>
+                      <div className="text-3xl font-black tracking-tight text-white font-mono">
+                        {formatTimeMMSS(overallPB.bestTimeSeconds)}
+                      </div>
+                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-amber-400/80" />
+                        <span>{overallPB.eventName}</span>
+                        <span className="text-slate-600">•</span>
+                        <span>{overallPB.date === '2020-01-01' ? 'Previous PB' : overallPB.date}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                        Gold PB
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Weeks Since Last Parkrun Card */}
+              {lastParkrun && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 shadow-md flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Last Parkrun
+                        </span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {lastParkrun.weeksAgo === 0
+                            ? 'This week!'
+                            : lastParkrun.weeksAgo === 1
+                            ? '1 week ago'
+                            : `${lastParkrun.weeksAgo} wks ago`}
+                        </span>
+                      </div>
+                      <div className="text-sm font-bold text-white leading-tight mt-0.5">
+                        {lastParkrun.eventName}
+                        {lastParkrun.timeSeconds ? (
+                          <span className="text-amber-300 font-mono text-xs font-semibold ml-1.5">
+                            {formatTimeMMSS(lastParkrun.timeSeconds)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">
+                        {lastParkrun.date}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STANDARD CATEGORY RECORDS (Clickable to Edit)                             */}
+          {/* ========================================================================= */}
+          <div className="space-y-2">
+            {activeCategory === 'parkrun' && (
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block px-1">
+                Milestone Personal Records
+              </span>
+            )}
+
+            {categoryRecords.map((rec) => {
+              const hasValue = rec.value != null && rec.value > 0;
+
+              return (
+                <div
+                  key={rec.id}
+                  onClick={() => openEditModal(rec)}
+                  className={`p-3.5 rounded-2xl border transition cursor-pointer active-press group ${
+                    hasValue
+                      ? 'bg-slate-950/70 border-slate-800 hover:border-amber-500/50 shadow-md shadow-black/20'
+                      : 'bg-slate-950/30 border-dashed border-slate-800/80 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                          hasValue
+                            ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400 shadow-sm'
+                            : 'bg-slate-900 border border-slate-800 text-slate-500'
+                        }`}
+                      >
+                        {hasValue ? <Trophy className="w-4 h-4" /> : <Award className="w-4 h-4" />}
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition">
+                          {rec.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                          {rec.date && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-500" />
+                              {rec.date}
+                            </span>
+                          )}
+                          {rec.notes && (
+                            <span className="flex items-center gap-1 text-slate-300">
+                              <MapPin className="w-3 h-3 text-slate-500" />
+                              {rec.notes}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Value / Edit Prompt */}
+                    <div className="flex items-center gap-2.5">
+                      {hasValue ? (
+                        <div className="text-right">
+                          <span className="text-base font-black text-amber-400 font-mono tracking-tight block">
+                            {rec.displayValue || rec.value}
+                          </span>
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold">Personal Best</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-500 group-hover:text-amber-400 flex items-center gap-1">
+                          <span>Set PB</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+
+                      <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 group-hover:text-white transition">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* COURSE PERSONAL BESTS SECTION (Only in Parkrun tab)                        */}
+          {/* ========================================================================= */}
+          {activeCategory === 'parkrun' && (
+            <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <span>Sync from Parkrun Website</span>
-                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-slate-300 flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-amber-400" />
+                    <span>Course Personal Bests ({coursePBs.length})</span>
                   </h4>
-                  <p className="text-[10px] text-slate-400">
-                    Pulls your official finish position, age grade %, courses & 5K PB
+                  <p className="text-[10px] text-slate-500">
+                    {totalRunsCount > 0 ? `${totalRunsCount} total parkruns completed` : 'Circuit records'}
                   </p>
                 </div>
-              </div>
-
-              {/* Input row */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Athlete # (e.g. A1924105)"
-                  value={athleteIdInput}
-                  onChange={(e) => {
-                    setAthleteIdInput(e.target.value);
-                    setSyncError(null);
-                    setSyncSuccess(null);
-                  }}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:border-emerald-400"
-                />
                 <button
                   type="button"
-                  disabled={isSyncingParkrun || !athleteIdInput.trim()}
-                  onClick={async () => {
-                    setIsSyncingParkrun(true);
-                    setSyncError(null);
-                    setSyncSuccess(null);
-                    try {
-                      const res = await onSyncParkrunWebsite(athleteIdInput.trim());
-                      setSyncSuccess(`Synced! Imported ${res.importedCount} parkruns across ${res.coursesCount} courses.`);
-                      confetti({ particleCount: 75, spread: 60, origin: { y: 0.6 } });
-                    } catch (err: any) {
-                      setSyncError(err.message || 'Failed to sync with parkrun.org.uk');
-                    } finally {
-                      setIsSyncingParkrun(false);
-                    }
+                  onClick={() => {
+                    setCourseVenue('Ashton Court');
+                    setCustomCourseVenue('');
+                    setCourseTimeInput('');
+                    setCourseDateInput('');
+                    setCoursePositionInput('');
+                    setCourseFormError(null);
+                    setIsAddCourseModalOpen(true);
                   }}
-                  className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 active-press transition shrink-0"
+                  className="py-1 px-2.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1 active-press transition"
                 >
-                  {isSyncingParkrun ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Syncing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Sync Website</span>
-                    </>
-                  )}
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Course PB</span>
                 </button>
               </div>
 
-              {syncSuccess && (
-                <div className="mt-2 text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{syncSuccess}</span>
+              {/* Course Search filter */}
+              {coursePBs.length > 2 && (
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search courses (e.g. Ashton Court, Eastville)..."
+                    value={courseSearch}
+                    onChange={(e) => setCourseSearch(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 placeholder:text-slate-600"
+                  />
                 </div>
               )}
-              {syncError && (
-                <div className="mt-2 text-[11px] font-semibold text-rose-400 flex items-center gap-1">
-                  <X className="w-3.5 h-3.5" />
-                  <span>{syncError}</span>
+
+              {/* Course cards list */}
+              {coursePBs.length === 0 ? (
+                <div className="bg-slate-950/40 border border-dashed border-slate-800 rounded-2xl p-4 text-center">
+                  <p className="text-xs text-slate-400 font-semibold">No course records yet</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Sync from the Parkrun website above or tap "+ Add Course PB" to enter one.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {filteredCourses.map((c, index) => {
+                    const isRank1 = index === 0;
+                    const isRank2 = index === 1;
+                    const isRank3 = index === 2;
+
+                    return (
+                      <div
+                        key={c.eventName}
+                        className={`p-3 rounded-2xl border flex items-center justify-between transition ${
+                          isRank1
+                            ? 'bg-amber-500/10 border-amber-500/30'
+                            : isRank2
+                            ? 'bg-slate-900 border-slate-700/80'
+                            : isRank3
+                            ? 'bg-slate-900 border-amber-700/30'
+                            : 'bg-slate-950/60 border-slate-800/80'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                              isRank1
+                                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                                : isRank2
+                                ? 'bg-slate-300 text-slate-950'
+                                : isRank3
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {isRank1 ? '1' : isRank2 ? '2' : isRank3 ? '3' : index + 1}
+                          </span>
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>{c.eventName}</span>
+                              {isRank1 && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded-full font-black bg-amber-400 text-slate-950 uppercase">
+                                  Overall PB
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500">
+                              {c.date === '2020-01-01' ? 'Previous PB' : c.date}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-sm font-black font-mono text-amber-300">
+                            {formatTimeMMSS(c.bestTimeSeconds)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
-
-          {categoryRecords.map((rec) => {
-            const hasValue = rec.value != null && rec.value > 0;
-
-            return (
-              <div
-                key={rec.id}
-                onClick={() => openEditModal(rec)}
-                className={`p-3.5 rounded-2xl border transition cursor-pointer active-press group ${
-                  hasValue
-                    ? 'bg-slate-950/70 border-slate-800 hover:border-amber-500/50 shadow-md shadow-black/20'
-                    : 'bg-slate-950/30 border-dashed border-slate-800/80 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                        hasValue
-                          ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400 shadow-sm'
-                          : 'bg-slate-900 border border-slate-800 text-slate-500'
-                      }`}
-                    >
-                      {hasValue ? <Trophy className="w-4 h-4" /> : <Award className="w-4 h-4" />}
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition">
-                        {rec.title}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                        {rec.date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-500" />
-                            {rec.date}
-                          </span>
-                        )}
-                        {rec.notes && (
-                          <span className="flex items-center gap-1 text-slate-300">
-                            <MapPin className="w-3 h-3 text-slate-500" />
-                            {rec.notes}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Value / Edit Prompt */}
-                  <div className="flex items-center gap-2.5">
-                    {hasValue ? (
-                      <div className="text-right">
-                        <span className="text-base font-black text-amber-400 font-mono tracking-tight block">
-                          {rec.displayValue || rec.value}
-                        </span>
-                        <span className="text-[10px] text-slate-500 uppercase font-semibold">Personal Best</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-semibold text-slate-500 group-hover:text-amber-400 flex items-center gap-1">
-                        <span>Set PB</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </span>
-                    )}
-
-                    <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 group-hover:text-white transition">
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
 
           {/* Add Custom PB Button */}
           <button
@@ -418,7 +672,7 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
 
         {/* Modal Footer Tip */}
         <div className="p-3 bg-slate-950 border-t border-slate-800/80 text-[11px] text-slate-400 text-center">
-          Tap any card to record or update your personal best. All PBs sync across your devices.
+          Tap any card to record or update your personal best. All records sync seamlessly across your devices.
         </div>
       </div>
 
@@ -627,6 +881,122 @@ export const TrophyCabinetModal: React.FC<TrophyCabinetModalProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Course PB Modal (for Parkrun circuits) */}
+      {isAddCourseModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Trees className="w-4 h-4 text-emerald-400" />
+                <span>Add Parkrun Course PB</span>
+              </h4>
+              <button
+                onClick={() => setIsAddCourseModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCoursePB} className="space-y-3.5">
+              {/* Venue Selector */}
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">Parkrun Course / Circuit</label>
+                <select
+                  value={courseVenue}
+                  onChange={(e) => setCourseVenue(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                >
+                  {BRISTOL_PARKRUNS.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                  <option value="custom">Other / Custom Course...</option>
+                </select>
+
+                {courseVenue === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="Enter course name (e.g. Bushy Park)"
+                    value={customCourseVenue}
+                    onChange={(e) => setCustomCourseVenue(e.target.value)}
+                    className="mt-2 w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                )}
+              </div>
+
+              {/* Time Input */}
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Personal Best Time (MM:SS)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 23:45"
+                  value={courseTimeInput}
+                  onChange={(e) => setCourseTimeInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+
+              {/* Date Input */}
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Date Achieved (optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={courseDateInput}
+                  onChange={(e) => setCourseDateInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+
+              {/* Finish Position */}
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1 flex items-center gap-1">
+                  <Award className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Finish Position (optional)</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 12"
+                  value={coursePositionInput}
+                  onChange={(e) => setCoursePositionInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+
+              {courseFormError && (
+                <div className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" />
+                  <span>{courseFormError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCourseModalOpen(false)}
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition active-press"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition active-press flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Save Course PB</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

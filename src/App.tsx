@@ -5,7 +5,7 @@ import { Header } from './components/Header';
 import { WeekSlots } from './components/WeekSlots';
 import { QuickActionBar } from './components/QuickActionBar';
 import { Heatmap } from './components/Heatmap';
-import { ParkrunPB, triggerPBConfetti } from './components/ParkrunPB';
+import { triggerPBConfetti } from './components/ParkrunPB';
 import { CardioStats } from './components/CardioStats';
 import { SettingsModal } from './components/SettingsModal';
 import { PendingActivityBanner } from './components/PendingActivityBanner';
@@ -710,15 +710,6 @@ export const App: React.FC = () => {
         {/* GitHub-Style 52-Week SVG Heatmap */}
         <Heatmap sessions={sessions} />
 
-        {/* Parkrun PB Records & Celebration */}
-        <ParkrunPB
-          sessions={sessions}
-          storedAthleteId={userGoals.parkrunAthleteId}
-          onSavePB={handleSaveCircuitPB}
-          onSyncWebsite={handleSyncParkrunWebsite}
-          onOpenTrophyCabinet={() => setIsTrophyCabinetOpen(true)}
-        />
-
         {/* Monthly Cardio Breakdown: Rides, Runs, Walks */}
         <CardioStats sessions={sessions} />
       </main>
@@ -740,13 +731,15 @@ export const App: React.FC = () => {
         initialTab={goalsModalTab}
       />
 
-      {/* Personal Records & Trophy Cabinet Modal */}
+      {/* Personal Records & Trophy Cabinet Modal (Houses Running, Cycling, Streaks & Full Parkrun Section) */}
       <TrophyCabinetModal
         isOpen={isTrophyCabinetOpen}
         onClose={() => setIsTrophyCabinetOpen(false)}
         records={personalRecords}
         onSaveRecord={handleSavePersonalRecord}
+        sessions={sessions}
         storedAthleteId={userGoals.parkrunAthleteId}
+        onSaveParkrunPB={handleSaveCircuitPB}
         onSyncParkrunWebsite={handleSyncParkrunWebsite}
       />
     </div>
