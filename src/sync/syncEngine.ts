@@ -55,6 +55,9 @@ export async function syncWithServer(): Promise<void> {
     // Find all pending sessions
     const pendingSessions = await db.sessions.where('syncStatus').equals('pending').toArray();
 
+    // Find all pending personal records
+    const pendingRecords = await db.records.where('syncStatus').equals('pending').toArray();
+
     // Check for pending goal changes
     const localGoals = await db.goals.get('current_goals');
     const goalsToPush = localGoals && localGoals.syncStatus === 'pending' ? localGoals : undefined;
@@ -65,7 +68,7 @@ export async function syncWithServer(): Promise<void> {
     };
 
     const lastSyncTime = parseInt(localStorage.getItem('last_sync_timestamp') || '0', 10);
-    console.log(`[SyncEngine] Pushing ${pendingSessions.length} pending session(s) and ${goalsToPush ? '1 goal update' : '0 goal updates'} to /api/sync...`);
+    console.log(`[SyncEngine] Pushing ${pendingSessions.length} pending session(s), ${pendingRecords.length} record(s), and ${goalsToPush ? '1 goal update' : '0 goal updates'} to /api/sync...`);
 
     const response = await fetch('/api/sync', {
       method: 'POST',
@@ -73,7 +76,8 @@ export async function syncWithServer(): Promise<void> {
       body: JSON.stringify({
         lastSyncTime,
         changes: pendingSessions,
-        goals: goalsToPush
+        goals: goalsToPush,
+        records: pendingRecords
       })
     });
 
@@ -97,6 +101,22 @@ export async function syncWithServer(): Promise<void> {
     if (pendingSessions.length > 0) {
       const syncedIds = pendingSessions.map((s) => s.id);
       await db.sessions.where('id').anyOf(syncedIds).modify({ syncStatus: 'synced' });
+    }
+
+    // Mark pushed records as synced
+    if (pendingRecords.length > 0) {
+      const syncedIds = pendingRecords.map((r) => r.id);
+      await db.records.where('id').anyOf(syncedIds).modify({ syncStatus: 'synced' });
+    }
+
+    // Merge incoming server records
+    if (data.serverRecords && data.serverRecords.length > 0) {
+      for (const r of data.serverRecords) {
+        const local = await db.records.get(r.id);
+        if (!local || local.updatedAt < r.updatedAt) {
+          await db.records.put({ ...r, syncStatus: 'synced' });
+        }
+      }
     }
 
     // Mark pushed goals as synced

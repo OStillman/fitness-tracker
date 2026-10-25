@@ -74,10 +74,10 @@ syncRouter.put('/goals', async (c) => {
 syncRouter.post('/', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const { lastSyncTime = 0, changes = [], goals } = body;
+  const { lastSyncTime = 0, changes = [], goals, records = [] } = body;
 
   const now = Date.now();
-  console.log(`[Sync] User "${userId}" pushing ${changes.length} change(s). lastSyncTime=${lastSyncTime}`);
+  console.log(`[Sync] User "${userId}" pushing ${changes.length} change(s), ${records.length} record(s). lastSyncTime=${lastSyncTime}`);
 
   const insertSession = db.prepare(`
     INSERT INTO sessions (id, user_id, date, kind, done, swapped_for, notes, updated_at)
@@ -110,6 +110,22 @@ syncRouter.post('/', async (c) => {
       distance_km = excluded.distance_km,
       duration_min = excluded.duration_min,
       updated_at = excluded.updated_at
+  `);
+
+  const insertRecord = db.prepare(`
+    INSERT INTO personal_records (id, user_id, category, title, metric_type, unit, value, display_value, date, notes, updated_at)
+    VALUES (@id, @user_id, @category, @title, @metric_type, @unit, @value, @display_value, @date, @notes, @updated_at)
+    ON CONFLICT(id) DO UPDATE SET
+      category = excluded.category,
+      title = excluded.title,
+      metric_type = excluded.metric_type,
+      unit = excluded.unit,
+      value = excluded.value,
+      display_value = excluded.display_value,
+      date = excluded.date,
+      notes = excluded.notes,
+      updated_at = excluded.updated_at
+    WHERE excluded.updated_at >= personal_records.updated_at
   `);
 
   const syncTx = db.transaction(() => {
@@ -146,6 +162,23 @@ syncRouter.post('/', async (c) => {
           updated_at: item.updatedAt || now
         });
       }
+    }
+
+    // Persist personal records if client sent them
+    for (const rec of records) {
+      insertRecord.run({
+        id: rec.id,
+        user_id: userId,
+        category: rec.category,
+        title: rec.title,
+        metric_type: rec.metricType,
+        unit: rec.unit,
+        value: rec.value ?? null,
+        display_value: rec.displayValue ?? null,
+        date: rec.date ?? null,
+        notes: rec.notes ?? null,
+        updated_at: rec.updatedAt || now
+      });
     }
 
     // Persist goals if client sent updated goals
@@ -210,6 +243,26 @@ syncRouter.post('/', async (c) => {
 
   console.log(`[Sync] Returning ${serverChanges.length} updated session(s) to user "${userId}".`);
 
+  // Fetch updated personal records
+  const updatedRecords = db.prepare(`
+    SELECT * FROM personal_records
+    WHERE updated_at > ?
+  `).all(lastSyncTime) as any[];
+
+  const serverRecords = updatedRecords.map((r) => ({
+    id: r.id,
+    category: r.category,
+    title: r.title,
+    metricType: r.metric_type,
+    unit: r.unit,
+    value: r.value,
+    displayValue: r.display_value,
+    date: r.date,
+    notes: r.notes,
+    updatedAt: r.updated_at,
+    syncStatus: 'synced'
+  }));
+
   const pendingActivities = db.prepare(`
     SELECT * FROM pending_activities
     WHERE status = 'pending'
@@ -248,6 +301,7 @@ syncRouter.post('/', async (c) => {
   return c.json({
     serverTime: now,
     serverChanges,
+    serverRecords,
     pendingActivities,
     goals: serverGoals
   });

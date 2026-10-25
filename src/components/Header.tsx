@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Settings, RefreshCw, AlertCircle, CheckCircle2, Target } from 'lucide-react';
+import { Flame, Settings, RefreshCw, AlertCircle, CheckCircle2, Target, Trophy } from 'lucide-react';
 import type { StreakStats } from '../utils/streak';
 import type { SyncState } from '../sync/syncEngine';
 
@@ -9,6 +9,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onTriggerSync: () => void;
   onOpenGoals?: () => void;
+  onOpenTrophyCabinet?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,7 +17,8 @@ export const Header: React.FC<HeaderProps> = ({
   syncState,
   onOpenSettings,
   onTriggerSync,
-  onOpenGoals
+  onOpenGoals,
+  onOpenTrophyCabinet
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
@@ -65,6 +67,18 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <span className="text-[10px] text-slate-400 uppercase font-bold">this wk</span>
           </button>
+
+          {/* Trophy Cabinet Trigger Button */}
+          {onOpenTrophyCabinet && (
+            <button
+              onClick={onOpenTrophyCabinet}
+              className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-slate-900 active-press transition"
+              aria-label="Personal Records & Trophy Cabinet"
+              title="Personal Records & Trophy Cabinet"
+            >
+              <Trophy className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Sync Trigger Button */}
           <button

@@ -110,3 +110,44 @@ export interface PendingActivity {
   status: 'pending' | 'accepted' | 'dismissed';
   created_at: number;
 }
+
+export type RecordCategory = 'run' | 'cycle' | 'parkrun' | 'streak';
+export type RecordMetricType = 'time' | 'distance' | 'speed' | 'number' | 'percentage';
+
+export interface PersonalRecord {
+  id: string;
+  category: RecordCategory;
+  title: string;
+  metricType: RecordMetricType;
+  unit: string;
+  value?: number;
+  displayValue?: string;
+  date?: string;
+  notes?: string;
+  updatedAt: number;
+  syncStatus?: 'synced' | 'pending';
+}
+
+export const DEFAULT_PERSONAL_RECORDS: Omit<PersonalRecord, 'updatedAt'>[] = [
+  // Running Distance PBs
+  { id: 'run_1mile', category: 'run', title: '1 Mile', metricType: 'time', unit: 'time' },
+  { id: 'run_5k', category: 'run', title: '5K Run', metricType: 'time', unit: 'time' },
+  { id: 'run_10k', category: 'run', title: '10K Run', metricType: 'time', unit: 'time' },
+  { id: 'run_half', category: 'run', title: 'Half Marathon', metricType: 'time', unit: 'time' },
+  { id: 'run_longest', category: 'run', title: 'Longest Run', metricType: 'distance', unit: 'km' },
+
+  // Cycling Records
+  { id: 'cycle_longest', category: 'cycle', title: 'Longest Ride', metricType: 'distance', unit: 'km' },
+  { id: 'cycle_20k', category: 'cycle', title: 'Fastest 20km', metricType: 'time', unit: 'time' },
+  { id: 'cycle_top_speed', category: 'cycle', title: 'Top Avg Speed', metricType: 'speed', unit: 'km/h' },
+
+  // Parkrun Milestone Records
+  { id: 'parkrun_best_pos', category: 'parkrun', title: 'Best Finish Position', metricType: 'number', unit: 'position' },
+  { id: 'parkrun_age_grade', category: 'parkrun', title: 'Highest Age Grade', metricType: 'percentage', unit: '%' },
+  { id: 'parkrun_courses_count', category: 'parkrun', title: 'Different Courses Run', metricType: 'number', unit: 'courses' },
+
+  // Consistency & Streak Bests
+  { id: 'streak_longest', category: 'streak', title: 'Longest Streak', metricType: 'number', unit: 'weeks' },
+  { id: 'streak_month_count', category: 'streak', title: 'Most Sessions in a Month', metricType: 'number', unit: 'sessions' },
+];
+

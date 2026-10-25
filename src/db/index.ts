@@ -1,10 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { Session, UserGoals } from '../types';
-import { DEFAULT_USER_GOALS } from '../types';
+import type { Session, UserGoals, PersonalRecord } from '../types';
+import { DEFAULT_USER_GOALS, DEFAULT_PERSONAL_RECORDS } from '../types';
 
 export class FitnessDB extends Dexie {
   sessions!: Table<Session, string>;
   goals!: Table<UserGoals, string>;
+  records!: Table<PersonalRecord, string>;
 
   constructor() {
     super('FitnessTrackerDB');
@@ -14,6 +15,11 @@ export class FitnessDB extends Dexie {
     this.version(2).stores({
       sessions: 'id, date, kind, done, updatedAt, syncStatus',
       goals: 'id, updatedAt, syncStatus'
+    });
+    this.version(3).stores({
+      sessions: 'id, date, kind, done, updatedAt, syncStatus',
+      goals: 'id, updatedAt, syncStatus',
+      records: 'id, category, updatedAt, syncStatus'
     });
   }
 }
@@ -26,6 +32,47 @@ export function formatDate(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// Retrieve personal records from Dexie merged with defaults
+export async function getPersonalRecords(): Promise<PersonalRecord[]> {
+  try {
+    const existing = await db.records.toArray();
+    const existingMap = new Map(existing.map((r) => [r.id, r]));
+
+    // Return all default catalog items (populated or blank) plus any custom ones
+    const combined: PersonalRecord[] = DEFAULT_PERSONAL_RECORDS.map((def) => {
+      if (existingMap.has(def.id)) {
+        return existingMap.get(def.id)!;
+      }
+      return {
+        ...def,
+        updatedAt: 0
+      };
+    });
+
+    // Add custom records that aren't in DEFAULT_PERSONAL_RECORDS
+    for (const rec of existing) {
+      if (!DEFAULT_PERSONAL_RECORDS.some((d) => d.id === rec.id)) {
+        combined.push(rec);
+      }
+    }
+
+    return combined;
+  } catch (err) {
+    console.error('[DB] Failed to load personal records from Dexie:', err);
+    return DEFAULT_PERSONAL_RECORDS.map((def) => ({ ...def, updatedAt: 0 }));
+  }
+}
+
+// Save or update a personal record
+export async function savePersonalRecord(record: PersonalRecord): Promise<void> {
+  const toSave: PersonalRecord = {
+    ...record,
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
+  };
+  await db.records.put(toSave);
 }
 
 // Retrieve user goals from Dexie, fallback to default

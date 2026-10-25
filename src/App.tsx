@@ -11,6 +11,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { PendingActivityBanner } from './components/PendingActivityBanner';
 import { WeeklyGoalCard } from './components/WeeklyGoalCard';
 import { GoalsAndSuggestionsModal } from './components/GoalsAndSuggestionsModal';
+import { TrophyCabinetModal } from './components/TrophyCabinetModal';
 import { computeStreakStats, getParkrunPBs, formatDateStr, getWeekStart } from './utils/streak';
 import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
 import {
@@ -21,16 +22,17 @@ import {
   restoreOrRenewSession,
   getAuthToken
 } from './auth/pocketId';
-import { saveUserGoals } from './db';
+import { saveUserGoals, getPersonalRecords, savePersonalRecord } from './db';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
-import type { ActivityKind, Session, SwapReason, PendingActivity, UserGoals, SuggestedRunWorkout } from './types';
+import type { ActivityKind, Session, SwapReason, PendingActivity, UserGoals, SuggestedRunWorkout, PersonalRecord } from './types';
 import { DEFAULT_USER_GOALS } from './types';
 
 export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [isTrophyCabinetOpen, setIsTrophyCabinetOpen] = useState(false);
   const [goalsModalTab, setGoalsModalTab] = useState<'goals' | 'suggestions'>('goals');
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -41,6 +43,8 @@ export const App: React.FC = () => {
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
   const storedGoals = useLiveQuery(() => db.goals.get('current_goals'), []);
   const userGoals: UserGoals = storedGoals || DEFAULT_USER_GOALS;
+  const storedRecords = useLiveQuery(() => getPersonalRecords(), []);
+  const personalRecords: PersonalRecord[] = storedRecords || [];
 
   // Listen for browser PWA install event
   useEffect(() => {
@@ -572,6 +576,12 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // Save or update a Personal Record in Trophy Cabinet
+  const handleSavePersonalRecord = async (record: PersonalRecord) => {
+    await savePersonalRecord(record);
+    syncWithServer();
+  };
+
   // 1. Loading Splash
   if (loadingAuth) {
     return (
@@ -653,6 +663,7 @@ export const App: React.FC = () => {
           setGoalsModalTab('goals');
           setIsGoalsModalOpen(true);
         }}
+        onOpenTrophyCabinet={() => setIsTrophyCabinetOpen(true)}
       />
 
       {/* Main Content Sections */}
@@ -705,6 +716,7 @@ export const App: React.FC = () => {
           storedAthleteId={userGoals.parkrunAthleteId}
           onSavePB={handleSaveCircuitPB}
           onSyncWebsite={handleSyncParkrunWebsite}
+          onOpenTrophyCabinet={() => setIsTrophyCabinetOpen(true)}
         />
 
         {/* Monthly Cardio Breakdown: Rides, Runs, Walks */}
@@ -726,6 +738,14 @@ export const App: React.FC = () => {
         onSaveGoals={handleSaveGoals}
         onLogSuggestedRun={handleLogSuggestedRun}
         initialTab={goalsModalTab}
+      />
+
+      {/* Personal Records & Trophy Cabinet Modal */}
+      <TrophyCabinetModal
+        isOpen={isTrophyCabinetOpen}
+        onClose={() => setIsTrophyCabinetOpen(false)}
+        records={personalRecords}
+        onSaveRecord={handleSavePersonalRecord}
       />
     </div>
   );

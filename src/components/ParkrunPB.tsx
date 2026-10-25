@@ -23,6 +23,7 @@ interface ParkrunPBProps {
   storedAthleteId?: string;
   onSavePB?: (eventName: string, timeSeconds: number, date?: string, position?: number) => Promise<void>;
   onSyncWebsite?: (athleteId: string) => Promise<{ importedCount: number; coursesCount: number }>;
+  onOpenTrophyCabinet?: () => void;
 }
 
 const BRISTOL_PARKRUNS = ['Ashton Court', 'Eastville', 'Blaise Castle', 'Pomphrey Hill', 'Windmill Hill'];
@@ -39,7 +40,8 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
   sessions,
   storedAthleteId = '',
   onSavePB,
-  onSyncWebsite
+  onSyncWebsite,
+  onOpenTrophyCabinet
 }) => {
   const { overallPB, coursePBs, lastParkrun, totalRunsCount } = getParkrunPBs(sessions);
 
@@ -301,6 +303,32 @@ export const ParkrunPB: React.FC<ParkrunPBProps> = ({
               </div>
               <div className="flex items-center gap-1 text-slate-400 group-hover:text-amber-400 transition">
                 <span className="text-[11px] font-medium">Browse</span>
+                <ChevronRight className="w-4 h-4" />
+              </div>
+            </button>
+          )}
+
+          {/* Action Button: Open All Personal Records / Trophy Cabinet */}
+          {onOpenTrophyCabinet && (
+            <button
+              onClick={onOpenTrophyCabinet}
+              className="mt-2 w-full py-2.5 px-3.5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 hover:from-amber-900/40 border border-amber-500/30 text-amber-200 text-xs font-semibold flex items-center justify-between active-press transition shadow-md group"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Trophy className="w-3.5 h-3.5" />
+                </div>
+                <div className="text-left">
+                  <span className="font-bold text-white block leading-tight">
+                    Trophy Cabinet & Records
+                  </span>
+                  <span className="text-[10px] text-amber-400/80">
+                    Running • Cycling • Parkrun • Streaks
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-amber-400 group-hover:translate-x-0.5 transition">
+                <span className="text-[11px] font-bold">Open</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
             </button>

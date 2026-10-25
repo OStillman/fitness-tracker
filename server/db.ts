@@ -87,6 +87,22 @@ export function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
+
+    CREATE TABLE IF NOT EXISTS personal_records (
+      id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT 'default_user',
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      metric_type TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      value REAL,
+      display_value TEXT,
+      date TEXT,
+      notes TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_personal_records_user ON personal_records(user_id, category);
   `);
 
   // Safe migration for existing user_goals tables
