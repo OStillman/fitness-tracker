@@ -172,6 +172,19 @@ export interface VdotPaces {
   repetitionDisplay: string;  // "3:55 - 4:10 /km"
 }
 
+export interface WorkoutSubStep {
+  stepOrder: number;
+  name: string;
+  stepType: StepType;
+  durationType: DurationType;
+  durationValue: number; // meters if distance, seconds if time, 0 if open
+  targetType: TargetType;
+  targetLow?: number;    // meters/sec if pace, or bpm if hr
+  targetHigh?: number;   // meters/sec if pace, or bpm if hr
+  targetDisplay?: string; // e.g. "4:45 - 4:55 /km" or "Zone 2 (130-145 bpm)"
+  description?: string;
+}
+
 export interface WorkoutStep {
   stepOrder: number;
   name: string;
@@ -184,7 +197,7 @@ export interface WorkoutStep {
   targetDisplay?: string; // e.g. "4:45 - 4:55 /km" or "Zone 2 (130-145 bpm)"
   description?: string;
   repeatCount?: number;  // for repeat blocks (e.g. 5x)
-  repeatSteps?: WorkoutStep[];
+  repeatSteps?: WorkoutSubStep[];
 }
 
 export interface PlanWorkout {

@@ -775,7 +775,7 @@ export const App: React.FC = () => {
       completedSessionId: sessionId,
       updatedAt: now,
       syncStatus: 'pending'
-    });
+    } as any);
 
     triggerPBConfetti();
     syncWithServer();

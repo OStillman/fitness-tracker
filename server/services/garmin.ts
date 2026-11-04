@@ -1,5 +1,5 @@
 import { db } from '../db';
-import type { PlanWorkout, WorkoutStep } from '../../src/types';
+import type { PlanWorkout, WorkoutStep, WorkoutSubStep } from '../../src/types';
 
 /**
  * Garmin Connect Integration Service
@@ -333,7 +333,7 @@ export class GarminService {
   public formatGarminWorkout(workout: PlanWorkout, paceEnforcement: 'pace' | 'hr'): any {
     let stepOrderCounter = 1;
 
-    const buildStep = (s: WorkoutStep): any => {
+    const buildStep = (s: WorkoutStep | WorkoutSubStep): any => {
       const stepType = GARMIN_STEP_TYPES[s.stepType] || GARMIN_STEP_TYPES.interval;
 
       // End condition (Distance or Time)
