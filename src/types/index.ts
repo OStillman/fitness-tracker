@@ -151,3 +151,94 @@ export const DEFAULT_PERSONAL_RECORDS: Omit<PersonalRecord, 'updatedAt'>[] = [
   { id: 'streak_month_count', category: 'streak', title: 'Most Sessions in a Month', metricType: 'number', unit: 'sessions' },
 ];
 
+export type TrainingPlanGoal = '5k' | '10k' | 'half_marathon' | 'marathon' | 'base' | 'maintenance' | 'recovery';
+export type WorkoutType = 'easy' | 'long' | 'tempo' | 'intervals' | 'recovery' | 'parkrun';
+export type PaceEnforcement = 'pace' | 'hr';
+export type StepType = 'warmup' | 'interval' | 'recovery' | 'cooldown' | 'steady' | 'rest';
+export type DurationType = 'distance' | 'time' | 'open';
+export type TargetType = 'pace' | 'hr' | 'open';
+
+export interface VdotPaces {
+  vdot: number;
+  easyPaceSecsPerKm: [number, number];       // [min, max] range in seconds/km e.g. [340, 370]
+  marathonPaceSecsPerKm: [number, number];   // [min, max] range
+  thresholdPaceSecsPerKm: [number, number];  // [min, max] range
+  intervalPaceSecsPerKm: [number, number];   // [min, max] range
+  repetitionPaceSecsPerKm: [number, number]; // [min, max] range
+  easyDisplay: string;        // "5:40 - 6:10 /km"
+  marathonDisplay: string;    // "5:10 - 5:25 /km"
+  thresholdDisplay: string;   // "4:45 - 4:58 /km"
+  intervalDisplay: string;    // "4:20 - 4:32 /km"
+  repetitionDisplay: string;  // "3:55 - 4:10 /km"
+}
+
+export interface WorkoutStep {
+  stepOrder: number;
+  name: string;
+  stepType: StepType;
+  durationType: DurationType;
+  durationValue: number; // meters if distance, seconds if time, 0 if open
+  targetType: TargetType;
+  targetLow?: number;    // meters/sec if pace, or bpm if hr
+  targetHigh?: number;   // meters/sec if pace, or bpm if hr
+  targetDisplay?: string; // e.g. "4:45 - 4:55 /km" or "Zone 2 (130-145 bpm)"
+  description?: string;
+  repeatCount?: number;  // for repeat blocks (e.g. 5x)
+  repeatSteps?: WorkoutStep[];
+}
+
+export interface PlanWorkout {
+  id: string;
+  planId: string;
+  weekNumber: number;        // 1-indexed (e.g. Week 1)
+  dayOfWeek: number;         // 0=Sun, 1=Mon, ..., 6=Sat
+  scheduledDate: string;     // YYYY-MM-DD
+  title: string;
+  workoutType: WorkoutType;
+  description: string;
+  totalDistanceKm: number;
+  estimatedDurationMin: number;
+  targetPaceDisplay: string;
+  steps: WorkoutStep[];
+  garminWorkoutId?: string;
+  garminSyncStatus?: 'synced' | 'pending' | 'failed';
+  garminSyncError?: string;
+  isCompleted?: boolean;
+  completedSessionId?: string;
+  updatedAt: number;
+  syncStatus?: 'synced' | 'pending';
+}
+
+export interface TrainingPlan {
+  id: string;
+  userId?: string;
+  title: string;
+  goal: TrainingPlanGoal;
+  goalLabel: string;
+  targetDate?: string;       // YYYY-MM-DD (e.g. race date)
+  totalWeeks: number;
+  currentWeek: number;
+  startDate: string;         // YYYY-MM-DD (Monday of week 1)
+  endDate: string;           // YYYY-MM-DD
+  runsPerWeek: number;       // 2 to 5
+  preferredDays: number[];   // array of days e.g. [2, 4, 6, 0] (Tue, Thu, Sat, Sun)
+  longRunDay: number;        // day of week (e.g. 0 for Sun)
+  includeParkrun: boolean;   // if true, Saturday incorporates Parkrun
+  paceEnforcement: PaceEnforcement; // 'pace' or 'hr'
+  benchmarkDistanceKm: number; // e.g. 5
+  benchmarkTimeSeconds: number; // e.g. 1470 (24:30)
+  vdot: number;
+  paces: VdotPaces;
+  status: 'active' | 'completed' | 'paused';
+  createdAt: number;
+  updatedAt: number;
+  syncStatus?: 'synced' | 'pending';
+}
+
+export interface GarminAccountStatus {
+  isConnected: boolean;
+  username?: string;
+  lastSyncTime?: number;
+}
+
+

@@ -103,6 +103,68 @@ export function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_personal_records_user ON personal_records(user_id, category);
+
+    CREATE TABLE IF NOT EXISTS training_plans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT 'default_user',
+      title TEXT NOT NULL,
+      goal TEXT NOT NULL,
+      goal_label TEXT NOT NULL,
+      target_date TEXT,
+      total_weeks INTEGER NOT NULL,
+      current_week INTEGER DEFAULT 1,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      runs_per_week INTEGER NOT NULL,
+      preferred_days TEXT NOT NULL,
+      long_run_day INTEGER NOT NULL,
+      include_parkrun INTEGER DEFAULT 1,
+      pace_enforcement TEXT DEFAULT 'pace',
+      benchmark_distance_km REAL NOT NULL,
+      benchmark_time_seconds INTEGER NOT NULL,
+      vdot REAL NOT NULL,
+      paces_json TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS plan_workouts (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL,
+      week_number INTEGER NOT NULL,
+      day_of_week INTEGER NOT NULL,
+      scheduled_date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      workout_type TEXT NOT NULL,
+      description TEXT,
+      total_distance_km REAL NOT NULL,
+      estimated_duration_min INTEGER NOT NULL,
+      target_pace_display TEXT,
+      steps_json TEXT NOT NULL,
+      garmin_workout_id TEXT,
+      garmin_sync_status TEXT DEFAULT 'pending',
+      garmin_sync_error TEXT,
+      is_completed INTEGER DEFAULT 0,
+      completed_session_id TEXT,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(plan_id) REFERENCES training_plans(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS garmin_auth (
+      id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT 'default_user',
+      username TEXT,
+      token_json TEXT,
+      mfa_ticket TEXT,
+      mfa_prompt TEXT,
+      last_sync_time INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_training_plans_user ON training_plans(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_plan_workouts_plan ON plan_workouts(plan_id, scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_plan_workouts_date ON plan_workouts(scheduled_date);
   `);
 
   // Safe migration for existing user_goals tables

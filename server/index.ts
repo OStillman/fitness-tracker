@@ -5,6 +5,8 @@ import { initDatabase } from './db';
 import { authMiddleware } from './middleware/auth';
 import { syncRouter } from './routes/sync';
 import { integrationsRouter } from './routes/integrations';
+import { trainingPlanRouter } from './routes/trainingPlan';
+import { garminRouter } from './routes/garmin';
 import fs from 'fs';
 import path from 'path';
 
@@ -45,6 +47,8 @@ app.get('/api/config', (c) => {
 // Authenticated API routes
 app.use('/api/*', authMiddleware);
 app.route('/api/sync', syncRouter);
+app.route('/api/training-plan', trainingPlanRouter);
+app.route('/api/garmin', garminRouter);
 
 // Prevent aggressive caching of PWA entrypoints (service worker, index.html, webmanifest)
 app.use('*', async (c, next) => {

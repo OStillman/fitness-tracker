@@ -12,6 +12,8 @@ import { PendingActivityBanner } from './components/PendingActivityBanner';
 import { WeeklyGoalCard } from './components/WeeklyGoalCard';
 import { GoalsAndSuggestionsModal } from './components/GoalsAndSuggestionsModal';
 import { TrophyCabinetModal } from './components/TrophyCabinetModal';
+import { TrainingPlanModal } from './components/TrainingPlanModal';
+import { TodayWorkoutBanner } from './components/TodayWorkoutBanner';
 import { computeStreakStats, getParkrunPBs, formatDateStr, getWeekStart } from './utils/streak';
 import { syncWithServer, subscribeSyncState, subscribePendingActivities, type SyncState } from './sync/syncEngine';
 import {
@@ -25,7 +27,17 @@ import {
 import { saveUserGoals, getPersonalRecords, savePersonalRecord } from './db';
 import type { User } from 'oidc-client-ts';
 import { Flame, LogIn, Lock, Loader2, Download } from 'lucide-react';
-import type { ActivityKind, Session, SwapReason, PendingActivity, UserGoals, SuggestedRunWorkout, PersonalRecord } from './types';
+import type {
+  ActivityKind,
+  Session,
+  SwapReason,
+  PendingActivity,
+  UserGoals,
+  SuggestedRunWorkout,
+  PersonalRecord,
+  TrainingPlan,
+  PlanWorkout
+} from './types';
 import { DEFAULT_USER_GOALS, DEFAULT_PERSONAL_RECORDS } from './types';
 
 export const App: React.FC = () => {
@@ -33,6 +45,7 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
   const [isTrophyCabinetOpen, setIsTrophyCabinetOpen] = useState(false);
+  const [isTrainingPlanOpen, setIsTrainingPlanOpen] = useState(false);
   const [goalsModalTab, setGoalsModalTab] = useState<'goals' | 'suggestions'>('goals');
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -44,6 +57,20 @@ export const App: React.FC = () => {
   const storedGoals = useLiveQuery(() => db.goals.get('current_goals'), []);
   const userGoals: UserGoals = storedGoals || DEFAULT_USER_GOALS;
   const rawRecords = useLiveQuery(() => db.records.toArray(), []) || [];
+
+  // Training Plan & Workouts reactive state
+  const activePlans = useLiveQuery(() => db.trainingPlans.where('status').equals('active').toArray(), []) || [];
+  const activePlan: TrainingPlan | null = activePlans[0] || null;
+  const allPlanWorkouts = useLiveQuery(() => db.planWorkouts.toArray(), []) || [];
+  const planWorkouts: PlanWorkout[] = React.useMemo(() => {
+    if (!activePlan) return [];
+    return allPlanWorkouts.filter((w) => w.planId === activePlan.id);
+  }, [activePlan, allPlanWorkouts]);
+
+  const todayStr = formatDateStr(new Date());
+  const todayWorkout: PlanWorkout | null = React.useMemo(() => {
+    return planWorkouts.find((w) => w.scheduledDate === todayStr) || null;
+  }, [planWorkouts, todayStr]);
 
   const personalRecords = React.useMemo(() => {
     const existingMap = new Map(rawRecords.map((r) => [r.id, r]));
@@ -659,6 +686,101 @@ export const App: React.FC = () => {
     syncWithServer();
   };
 
+  // Load active training plan from server on login
+  useEffect(() => {
+    async function loadServerTrainingPlan() {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch('/api/training-plan/active', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.plan) {
+            await db.trainingPlans.put(data.plan);
+            if (Array.isArray(data.workouts) && data.workouts.length > 0) {
+              await db.planWorkouts.bulkPut(data.workouts);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch server training plan:', err);
+      }
+    }
+
+    if (user) {
+      loadServerTrainingPlan();
+    }
+  }, [user]);
+
+  // Save or replace active Training Plan
+  const handleSavePlan = async (newPlan: TrainingPlan, newWorkouts: PlanWorkout[]) => {
+    await db.trainingPlans.put(newPlan);
+    await db.planWorkouts.bulkPut(newWorkouts);
+
+    try {
+      const token = await getAuthToken();
+      await fetch('/api/training-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ plan: newPlan, workouts: newWorkouts })
+      });
+    } catch (err) {
+      console.warn('Failed to push training plan to server:', err);
+    }
+  };
+
+  // Delete active Training Plan
+  const handleDeletePlan = async (planId: string) => {
+    await db.trainingPlans.delete(planId);
+    const toDelete = await db.planWorkouts.where('planId').equals(planId).toArray();
+    await db.planWorkouts.bulkDelete(toDelete.map((w) => w.id));
+
+    try {
+      const token = await getAuthToken();
+      await fetch(`/api/training-plan/${planId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+    } catch (err) {
+      console.warn('Failed to delete training plan on server:', err);
+    }
+  };
+
+  // Mark planned workout as complete and log run session
+  const handleCompleteWorkout = async (workout: PlanWorkout) => {
+    const now = Date.now();
+    const sessionId = `workout-session-${workout.scheduledDate}-${now}`;
+
+    await db.sessions.put({
+      id: sessionId,
+      date: workout.scheduledDate,
+      kind: workout.workoutType === 'parkrun' ? 'parkrun' : 'run',
+      done: true,
+      activity: {
+        kind: 'run',
+        distanceKm: workout.totalDistanceKm,
+        durationMin: workout.estimatedDurationMin
+      },
+      notes: workout.title,
+      updatedAt: now,
+      syncStatus: 'pending'
+    });
+
+    await db.planWorkouts.update(workout.id, {
+      isCompleted: true,
+      completedSessionId: sessionId,
+      updatedAt: now,
+      syncStatus: 'pending'
+    });
+
+    triggerPBConfetti();
+    syncWithServer();
+  };
+
   // 1. Loading Splash
   if (loadingAuth) {
     return (
@@ -741,10 +863,18 @@ export const App: React.FC = () => {
           setIsGoalsModalOpen(true);
         }}
         onOpenTrophyCabinet={() => setIsTrophyCabinetOpen(true)}
+        onOpenTrainingPlan={() => setIsTrainingPlanOpen(true)}
       />
 
       {/* Main Content Sections */}
       <main className="space-y-2">
+        {/* Today's Planned Workout Banner (Runna / Garmin Sync) */}
+        <TodayWorkoutBanner
+          workout={todayWorkout}
+          onOpenPlan={() => setIsTrainingPlanOpen(true)}
+          onCompleteWorkout={handleCompleteWorkout}
+        />
+
         {/* Pending Activity Banner from Strava / Home Assistant */}
         <PendingActivityBanner activities={pendingActivities} />
 
@@ -818,6 +948,18 @@ export const App: React.FC = () => {
         storedAthleteId={userGoals.parkrunAthleteId}
         onSaveParkrunPB={handleSaveCircuitPB}
         onSyncParkrunWebsite={handleSyncParkrunWebsite}
+      />
+
+      {/* Adaptive Running Training Plan & Garmin Watch Workouts Modal */}
+      <TrainingPlanModal
+        isOpen={isTrainingPlanOpen}
+        onClose={() => setIsTrainingPlanOpen(false)}
+        activePlan={activePlan}
+        workouts={planWorkouts}
+        personalRecords={personalRecords}
+        onSavePlan={handleSavePlan}
+        onDeletePlan={handleDeletePlan}
+        onCompleteWorkout={handleCompleteWorkout}
       />
     </div>
   );

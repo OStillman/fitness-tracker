@@ -10,6 +10,7 @@ interface HeaderProps {
   onTriggerSync: () => void;
   onOpenGoals?: () => void;
   onOpenTrophyCabinet?: () => void;
+  onOpenTrainingPlan?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,7 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onTriggerSync,
   onOpenGoals,
-  onOpenTrophyCabinet
+  onOpenTrophyCabinet,
+  onOpenTrainingPlan
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
@@ -67,6 +69,18 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <span className="text-[10px] text-slate-400 uppercase font-bold">this wk</span>
           </button>
+
+          {/* Training Plan Trigger Button */}
+          {onOpenTrainingPlan && (
+            <button
+              onClick={onOpenTrainingPlan}
+              className="p-2 rounded-xl text-cyan-400 hover:text-cyan-300 hover:bg-slate-900 active-press transition"
+              aria-label="Running Training Plan"
+              title="Running Training Plan & Garmin Workouts"
+            >
+              <Target className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Trophy Cabinet Trigger Button */}
           {onOpenTrophyCabinet && (

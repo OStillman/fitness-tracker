@@ -1,11 +1,13 @@
 import Dexie, { type Table } from 'dexie';
-import type { Session, UserGoals, PersonalRecord } from '../types';
+import type { Session, UserGoals, PersonalRecord, TrainingPlan, PlanWorkout } from '../types';
 import { DEFAULT_USER_GOALS, DEFAULT_PERSONAL_RECORDS } from '../types';
 
 export class FitnessDB extends Dexie {
   sessions!: Table<Session, string>;
   goals!: Table<UserGoals, string>;
   records!: Table<PersonalRecord, string>;
+  trainingPlans!: Table<TrainingPlan, string>;
+  planWorkouts!: Table<PlanWorkout, string>;
 
   constructor() {
     super('FitnessTrackerDB');
@@ -20,6 +22,13 @@ export class FitnessDB extends Dexie {
       sessions: 'id, date, kind, done, updatedAt, syncStatus',
       goals: 'id, updatedAt, syncStatus',
       records: 'id, category, updatedAt, syncStatus'
+    });
+    this.version(4).stores({
+      sessions: 'id, date, kind, done, updatedAt, syncStatus',
+      goals: 'id, updatedAt, syncStatus',
+      records: 'id, category, updatedAt, syncStatus',
+      trainingPlans: 'id, status, goal, updatedAt, syncStatus',
+      planWorkouts: 'id, planId, scheduledDate, weekNumber, garminSyncStatus, updatedAt, syncStatus'
     });
   }
 }
@@ -108,6 +117,51 @@ export async function saveUserGoals(updates: Partial<UserGoals>): Promise<UserGo
   };
   await db.goals.put(updated);
   return updated;
+}
+
+// Training Plans & Workouts Helpers
+export async function getActiveTrainingPlan(): Promise<TrainingPlan | null> {
+  try {
+    const plans = await db.trainingPlans.where('status').equals('active').toArray();
+    return plans[0] || null;
+  } catch (err) {
+    console.error('[DB] Failed to load active training plan:', err);
+    return null;
+  }
+}
+
+export async function saveTrainingPlan(plan: TrainingPlan): Promise<void> {
+  await db.trainingPlans.put({
+    ...plan,
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
+  });
+}
+
+export async function getPlanWorkouts(planId: string): Promise<PlanWorkout[]> {
+  try {
+    return await db.planWorkouts.where('planId').equals(planId).sortBy('scheduledDate');
+  } catch (err) {
+    console.error('[DB] Failed to load plan workouts:', err);
+    return [];
+  }
+}
+
+export async function savePlanWorkouts(workouts: PlanWorkout[]): Promise<void> {
+  const toSave = workouts.map((w) => ({
+    ...w,
+    updatedAt: Date.now(),
+    syncStatus: 'pending' as const
+  }));
+  await db.planWorkouts.bulkPut(toSave);
+}
+
+export async function updatePlanWorkout(workout: PlanWorkout): Promise<void> {
+  await db.planWorkouts.put({
+    ...workout,
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
+  });
 }
 
 // Generate demo data for instant visualization test
