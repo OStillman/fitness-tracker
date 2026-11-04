@@ -28,6 +28,7 @@ import type {
 } from '../types';
 import { calculateVDOT, getVdotPaces, formatPaceMinSec } from '../utils/vdot';
 import { generateTrainingPlan } from '../utils/trainingPlanGenerator';
+import { getAuthToken } from '../auth/pocketId';
 
 interface TrainingPlanModalProps {
   isOpen: boolean;
@@ -164,9 +165,13 @@ export const TrainingPlanModal: React.FC<TrainingPlanModalProps> = ({
     setIsSyncingGarmin(true);
     setGarminSyncMsg(null);
     try {
+      const token = await getAuthToken();
       const res = await fetch('/api/garmin/sync-window', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
       });
 
       const data = await res.json();

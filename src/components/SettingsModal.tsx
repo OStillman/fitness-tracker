@@ -16,7 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { db, loadDemoData } from '../db';
-import { getUserManager, loginWithPocketId, logoutPocketId, getPocketIdAuthority } from '../auth/pocketId';
+import { getUserManager, loginWithPocketId, logoutPocketId, getPocketIdAuthority, getAuthToken } from '../auth/pocketId';
 import type { User } from 'oidc-client-ts';
 
 interface SettingsModalProps {
@@ -43,10 +43,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       getUserManager().getUser().then((user) => setCurrentUser(user));
-      fetch('/api/garmin/status')
-        .then((r) => r.json())
-        .then((data) => setGarminStatus(data))
-        .catch(() => setGarminStatus({ isConnected: false }));
+      getAuthToken().then((token) => {
+        fetch('/api/garmin/status', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+          .then((r) => r.json())
+          .then((data) => setGarminStatus(data))
+          .catch(() => setGarminStatus({ isConnected: false }));
+      });
     }
   }, [isOpen]);
 
@@ -55,9 +59,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     setGarminLoading(true);
     setGarminError(null);
     try {
+      const token = await getAuthToken();
       const res = await fetch('/api/garmin/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ email: garminEmail, password: garminPassword })
       });
       const data = await res.json();
@@ -84,9 +92,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     setGarminLoading(true);
     setGarminError(null);
     try {
+      const token = await getAuthToken();
       const res = await fetch('/api/garmin/mfa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ code: garminMfaCode })
       });
       const data = await res.json();
@@ -107,7 +119,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handleGarminDisconnect = async () => {
     try {
-      await fetch('/api/garmin/disconnect', { method: 'POST' });
+      const token = await getAuthToken();
+      await fetch('/api/garmin/disconnect', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       setGarminStatus({ isConnected: false });
       showStatus('Garmin Connect disconnected');
     } catch (err) {
