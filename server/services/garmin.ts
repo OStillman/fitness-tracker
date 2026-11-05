@@ -166,6 +166,7 @@ export class GarminService {
 
       cookies = this.parseSetCookies(signinRes.headers, cookies);
       const signinHtml = await signinRes.text();
+      console.log(`[GarminService] SSO response status: ${signinRes.status}, received cookies: ${Object.keys(cookies).length}`);
 
       // Check if MFA is required
       if (signinHtml.includes('mfa-code') || signinHtml.includes('verifyMFA') || signinHtml.includes('two-step')) {
@@ -216,6 +217,7 @@ export class GarminService {
         return { success: true };
       }
 
+      console.warn(`[GarminService] SSO response unrecognized: ${signinHtml.substring(0, 300)}`);
       return {
         success: false,
         error: 'Unable to authenticate with Garmin Connect. Check credentials.'
